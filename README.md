@@ -19,7 +19,7 @@ your database stay local and are never committed to git.
 
 1. Install [uv](https://docs.astral.sh/uv/) if you don't have it.
 2. ```bash
-   git clone <this repo> && cd ysearch
+   git clone https://github.com/AryanJ129/ysearch.git && cd ysearch
    uv sync
    uv run ysearch ui
    ```
