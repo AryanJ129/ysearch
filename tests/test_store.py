@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from whysearch import store
+from ysearch import store
 
 
 def test_wal_mode_is_on(tmp_path):

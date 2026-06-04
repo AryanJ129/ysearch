@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-DEFAULT_DB = Path("whysearch.db")
+DEFAULT_DB = Path("ysearch.db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (

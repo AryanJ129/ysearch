@@ -10,7 +10,7 @@ import re
 
 import httpx
 
-from whysearch.models import Job
+from ysearch.models import Job
 
 _TAG_RE = re.compile(r"<[^>]+>")
 

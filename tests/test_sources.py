@@ -1,4 +1,4 @@
-from whysearch.sources import ats, jsearch
+from ysearch.sources import ats, jsearch
 
 JSEARCH_PAYLOAD = {
     "data": [

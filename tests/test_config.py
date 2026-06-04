@@ -1,6 +1,6 @@
 import pytest
 
-from whysearch import config
+from ysearch import config
 
 
 def test_load_criteria(tmp_path):

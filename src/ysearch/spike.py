@@ -13,9 +13,9 @@ from pathlib import Path
 
 import httpx
 
-from whysearch import config
-from whysearch.models import Job
-from whysearch.sources import ats, jsearch
+from ysearch import config
+from ysearch.models import Job
+from ysearch.sources import ats, jsearch
 
 SPIKE_DIR = Path("spike")
 
@@ -90,7 +90,7 @@ def run(per_query: int = 10) -> int:
         env = jsearch.PROVIDERS[provider]["env"]
         lines.append(
             f"SKIPPED — no ${env} in .env. Sign up free (no card) at"
-            " https://www.openwebninja.com/api/jsearch and re-run `whysearch spike`."
+            " https://www.openwebninja.com/api/jsearch and re-run `ysearch spike`."
         )
 
     # --- Greenhouse ATS boards (free, unlimited) ---

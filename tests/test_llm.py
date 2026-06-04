@@ -1,4 +1,4 @@
-from whysearch import llm
+from ysearch import llm
 
 
 def test_slug_uses_dot_not_dash():

@@ -1,4 +1,4 @@
-# WhySearch *(name WIP)*
+# ysearch *(name WIP)*
 
 Open-source AI job scout: **aggregate → score → draft → you click submit.**
 

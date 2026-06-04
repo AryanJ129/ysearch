@@ -1,4 +1,4 @@
-from whysearch import prompts
+from ysearch import prompts
 
 
 def test_posting_is_truncated():

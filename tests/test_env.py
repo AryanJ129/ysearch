@@ -2,7 +2,7 @@
 
 import os
 
-from whysearch import config
+from ysearch import config
 
 
 def test_filled_dotenv_value_overrides_shell_env(tmp_path, monkeypatch):

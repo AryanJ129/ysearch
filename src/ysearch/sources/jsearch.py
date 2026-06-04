@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from whysearch.models import Job
+from ysearch.models import Job
 
 PROVIDERS: dict[str, dict[str, str]] = {
     "openwebninja": {

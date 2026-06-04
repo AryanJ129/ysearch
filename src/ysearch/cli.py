@@ -1,4 +1,4 @@
-"""whysearch CLI."""
+"""ysearch CLI."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import argparse
 import os
 import sys
 
-from whysearch import config, llm, store
+from ysearch import config, llm, store
 
 
 def cmd_doctor() -> int:
@@ -41,7 +41,7 @@ def cmd_doctor() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="whysearch",
+        prog="ysearch",
         description="AI job scout — aggregate, score, draft; you click submit.",
     )
     sub = parser.add_subparsers(dest="command")
@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "doctor":
         return cmd_doctor()
     if args.command == "spike":
-        from whysearch import spike
+        from ysearch import spike
 
         return spike.run(per_query=args.per_query)
     if args.command in {"scan", "digest", "ui"}:
