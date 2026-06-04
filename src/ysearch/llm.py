@@ -41,6 +41,40 @@ def validate_model_slug(slug: str = MODEL) -> None:
         )
 
 
+def mask_key(value: str | None) -> str:
+    """Display fingerprint for a saved key: prefix + last 4, NEVER the full
+    value — the full key must never be rendered or logged anywhere."""
+    if not value:
+        return "not set"
+    if len(value) <= 12:
+        return "…" + value[-2:]
+    return f"{value[:6]}…{value[-4:]}"
+
+
+def check_key(api_key: str | None = None) -> tuple[bool, str]:
+    """Validate an OpenRouter key via GET /key — authenticated but FREE
+    (no tokens spent). Returns (ok, human detail)."""
+    api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        return False, "no key set"
+    try:
+        resp = httpx.get(
+            f"{OPENROUTER_BASE}/key",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15.0,
+        )
+    except httpx.HTTPError as exc:
+        return False, f"network error: {exc}"
+    if resp.status_code == 200:
+        usage = (resp.json().get("data") or {}).get("usage")
+        if isinstance(usage, (int, float)):
+            return True, f"key valid — ${usage:.2f} used so far"
+        return True, "key valid"
+    if resp.status_code == 401:
+        return False, "invalid key (401)"
+    return False, f"unexpected response: HTTP {resp.status_code}"
+
+
 def chat(
     system: str, user: str, *, max_tokens: int = 300, timeout: float = 60.0
 ) -> tuple[str, float]:

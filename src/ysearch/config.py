@@ -150,6 +150,27 @@ def save_resume(text: str, path: Path | None = None) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def companies_yaml_text(path: Path | None = None) -> str:
+    """Raw companies.yaml text for the Settings ATS-watchlist editor."""
+    path = path or CONFIG_DIR / "companies.yaml"
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    example = path.with_name(f"{path.stem}.example{path.suffix}")
+    return example.read_text(encoding="utf-8") if example.exists() else ""
+
+
+def save_companies_yaml(text: str, path: Path | None = None) -> Companies:
+    """Validate the ATS watchlist YAML (raises clearly) and save it."""
+    data = yaml.safe_load(text)
+    if not isinstance(data, dict):
+        raise ValueError("Watchlist must be a YAML mapping (greenhouse/lever/ashby lists).")
+    companies = Companies(**data)
+    path = path or CONFIG_DIR / "companies.yaml"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+    return companies
+
+
 def criteria_yaml_text(path: Path | None = None) -> str:
     """Raw criteria.yaml text for the Settings editor (falls back to the
     example, then empty)."""

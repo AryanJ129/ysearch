@@ -68,3 +68,48 @@ def test_score_system_has_seniority_cap_rule():
 
     assert "seniority_mismatch" in prompts.SCORE_SYSTEM
     assert "60 or below" in prompts.SCORE_SYSTEM
+
+
+def test_mask_key_never_reveals_the_middle():
+    assert llm.mask_key(None) == "not set"
+    assert llm.mask_key("") == "not set"
+    assert llm.mask_key("short") == "…rt"
+    masked = llm.mask_key("sk-or-v1-aaaabbbbccccddddeeee4038")
+    assert masked == "sk-or-…4038"
+    assert "aaaabbbb" not in masked  # the body never appears
+
+
+def test_save_companies_yaml_validates_before_writing(tmp_path):
+    target = tmp_path / "companies.yaml"
+    with pytest.raises(Exception):
+        config.save_companies_yaml("- just\n- a list\n", path=target)  # not a mapping
+    assert not target.exists()
+    companies = config.save_companies_yaml("greenhouse: [anthropic]\n", path=target)
+    assert companies.greenhouse == ["anthropic"]
+    assert target.exists()
+
+
+def test_source_toggles_default_on_and_persist(tmp_path):
+    from ysearch import scan, store
+
+    conn = store.connect(tmp_path / "t.db")
+    store.init_db(conn)
+    assert scan.enabled_sources(conn) == {"jsearch": True, "ats": True, "naukri": True}
+    scan.set_source_enabled(conn, "jsearch", False)
+    assert scan.enabled_sources(conn)["jsearch"] is False
+    scan.set_source_enabled(conn, "jsearch", True)
+    assert scan.enabled_sources(conn)["jsearch"] is True
+    with pytest.raises(ValueError):
+        scan.set_source_enabled(conn, "linkedin", True)  # never a source
+
+
+def test_openrouter_check_key_no_key():
+    import os
+
+    saved = os.environ.pop("OPENROUTER_API_KEY", None)
+    try:
+        ok, detail = llm.check_key()
+        assert ok is False and "no key" in detail
+    finally:
+        if saved:
+            os.environ["OPENROUTER_API_KEY"] = saved

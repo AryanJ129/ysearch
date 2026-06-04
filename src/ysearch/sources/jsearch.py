@@ -81,6 +81,21 @@ def parse_jobs(payload: dict) -> list[Job]:
     return jobs
 
 
+def ping(provider: str | None = None) -> tuple[bool, str]:
+    """Key check via one minimal search — COSTS 1 QUOTA REQUEST (the free tier
+    has no free auth endpoint), which the UI button labels honestly."""
+    try:
+        result = search("software engineer", country="in", page=1, provider=provider)
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        if code in (401, 403):
+            return False, f"invalid key ({code})"
+        return False, f"unexpected response: HTTP {code}"
+    except (httpx.HTTPError, RuntimeError) as exc:
+        return False, str(exc)
+    return True, f"key valid — {len(result.jobs)} results returned"
+
+
 def search(
     query: str,
     *,

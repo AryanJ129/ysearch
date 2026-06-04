@@ -196,36 +196,75 @@ with tab_funnel:
 with tab_settings:
     import os
 
+    from ysearch import llm, scan
+    from ysearch.sources import jsearch
+
     st.subheader("API keys")
     st.caption(
-        "Stored in this folder's `.env` (gitignored) — your keys stay on your machine"
-        " and are never committed or shared. Both have free tiers."
+        "Stored in this folder's `.env` (gitignored) — your keys stay on your machine,"
+        " are never committed, never shown in full, and never logged. Both have free tiers."
     )
     key_specs = [
         (
             "OPENWEBNINJA_API_KEY",
-            "OpenWeb Ninja key (job discovery)",
+            "OpenWebNinja / JSearch key (job discovery)",
             "Free at openwebninja.com/api/jsearch — 200 requests/month, no card.",
+            "Test key (uses 1 of your 200 monthly requests)",
+            lambda: jsearch.ping(),
         ),
         (
             "OPENROUTER_API_KEY",
-            "OpenRouter key (scoring + drafts)",
+            "OpenRouter API key (scoring + drafts)",
             "Create at openrouter.ai/settings/keys — scoring costs ~$0.003/job.",
+            "Test key (free — no tokens spent)",
+            lambda: llm.check_key(),
         ),
     ]
     key_inputs: dict[str, str] = {}
-    for env_name, label, hint in key_specs:
-        is_set = bool(os.environ.get(env_name))
-        key_inputs[env_name] = st.text_input(
-            label + (" — ✓ currently set" if is_set else " — not set"),
-            type="password",
-            help=hint,
-            key=f"key-{env_name}",
-        )
+    for env_name, label, hint, test_label, test_fn in key_specs:
+        col_input, col_test = st.columns([3, 1], vertical_alignment="bottom")
+        with col_input:
+            key_inputs[env_name] = st.text_input(
+                label, type="password", help=hint, key=f"key-{env_name}"
+            )
+            st.caption(f"Saved: `{llm.mask_key(os.environ.get(env_name))}`")
+        with col_test:
+            if st.button("Test key", key=f"test-{env_name}", help=test_label):
+                with st.spinner("Testing..."):
+                    ok, detail = test_fn()
+                (st.success if ok else st.error)(detail)
     if st.button("Save keys"):
         config.save_env_values(key_inputs)
         st.success("Saved to .env — keys are active now.")
         st.rerun()
+
+    st.subheader("Sources")
+    st.caption("Which sources `ysearch scan` pulls from.")
+    sources_now = scan.enabled_sources(conn)
+    source_labels = {
+        "jsearch": "JSearch (Google for Jobs — quota: 200 req/month free)",
+        "ats": "ATS boards (Greenhouse / Lever / Ashby — free, no quota)",
+        "naukri": "Naukri alert emails (parser coming — needs Gmail setup)",
+    }
+    for source, label in source_labels.items():
+        toggled = st.toggle(label, value=sources_now[source], key=f"src-{source}")
+        if toggled != sources_now[source]:
+            scan.set_source_enabled(conn, source, toggled)
+            st.rerun()
+    with st.expander("ATS watchlist (companies.yaml)"):
+        st.caption(
+            "Company slugs from careers-page URLs, e.g. boards.greenhouse.io/<slug>,"
+            " jobs.lever.co/<slug>, jobs.ashbyhq.com/<slug>."
+        )
+        if "companies-editor" not in st.session_state:
+            st.session_state["companies-editor"] = config.companies_yaml_text()
+        st.text_area("companies.yaml", height=200, key="companies-editor")
+        if st.button("Save watchlist"):
+            try:
+                config.save_companies_yaml(st.session_state["companies-editor"])
+                st.success("Watchlist validated and saved.")
+            except Exception as exc:
+                st.error(f"Not saved — {exc}")
 
     st.subheader("Resume")
     st.caption("Used to ground cover-note drafts — the AI may only claim what's in here.")

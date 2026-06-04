@@ -31,6 +31,21 @@ _ATS_FETCHERS = {
 }
 
 
+SOURCE_TOGGLES = ("jsearch", "ats", "naukri")
+
+
+def enabled_sources(conn) -> dict[str, bool]:
+    """Settings-tab source toggles, stored in db meta. Default: enabled.
+    (naukri is reserved — the parser lands once a real alert email exists.)"""
+    return {s: store.get_meta(conn, f"source_enabled_{s}") != "0" for s in SOURCE_TOGGLES}
+
+
+def set_source_enabled(conn, source: str, enabled: bool) -> None:
+    if source not in SOURCE_TOGGLES:
+        raise ValueError(f"Unknown source {source!r} — one of {SOURCE_TOGGLES}")
+    store.set_meta(conn, f"source_enabled_{source}", "1" if enabled else "0")
+
+
 def build_query_plan(criteria: Criteria, conn) -> list[QuerySpec]:
     """Daily queries + rotate_per_scan pool entries, round-robin via meta cursor."""
     plan = list(criteria.queries)
@@ -66,21 +81,29 @@ def run() -> int:
     store.init_db(conn)
     total_new = total_merged = 0
 
-    plan = build_query_plan(criteria, conn)
-    print(f"JSearch plan ({len(plan)} requests): {[s.q for s in plan]}")
-    for spec in plan:
-        remote = criteria.resolved_remote(spec)
-        try:
-            result = jsearch.search(spec.q, country=criteria.country, remote=remote or None)
-        except (httpx.HTTPError, RuntimeError) as exc:
-            print(f"  [!!] {spec.q!r}: {exc}")
-            continue
-        new, merged = _ingest(conn, result.jobs, country_hint=criteria.country)
-        total_new += new
-        total_merged += merged
-        print(f"  [ok] {spec.q!r}: {len(result.jobs)} jobs ({new} new, {merged} merged)")
+    sources = enabled_sources(conn)
 
-    for kind, fetcher in _ATS_FETCHERS.items():
+    if sources["jsearch"]:
+        plan = build_query_plan(criteria, conn)
+        print(f"JSearch plan ({len(plan)} requests): {[s.q for s in plan]}")
+        for spec in plan:
+            remote = criteria.resolved_remote(spec)
+            try:
+                result = jsearch.search(spec.q, country=criteria.country, remote=remote or None)
+            except (httpx.HTTPError, RuntimeError) as exc:
+                print(f"  [!!] {spec.q!r}: {exc}")
+                continue
+            new, merged = _ingest(conn, result.jobs, country_hint=criteria.country)
+            total_new += new
+            total_merged += merged
+            print(f"  [ok] {spec.q!r}: {len(result.jobs)} jobs ({new} new, {merged} merged)")
+    else:
+        print("[--] JSearch disabled in Settings — skipping (no quota spent).")
+
+    if not sources["ats"]:
+        print("[--] ATS boards disabled in Settings — skipping.")
+    ats_watchlist = _ATS_FETCHERS.items() if sources["ats"] else ()
+    for kind, fetcher in ats_watchlist:
         for slug in getattr(companies, kind):
             try:
                 jobs = fetcher(slug)
