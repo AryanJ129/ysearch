@@ -42,13 +42,36 @@ def parse_reply(text: str) -> tuple[int | None, list[str], list[str]]:
     return score, reasons, flags
 
 
+def apply_policy(score: int | None, flags: list[str]) -> int | None:
+    """Deterministic scoring policy on top of the model's judgment.
+
+    seniority_mismatch caps the score at 60 in CODE, not just in the prompt —
+    a posting requiring far more experience must never top the inbox even if
+    the model scores it high (the bug that put a 5-years-required role at 92
+    for a 1.5-year owner)."""
+    if score is not None and "seniority_mismatch" in flags:
+        return min(score, 60)
+    return score
+
+
 def score_unscored(
-    conn, criteria: Criteria, *, limit: int | None = None, daily_cap: int = DAILY_CAP
+    conn,
+    criteria: Criteria,
+    *,
+    limit: int | None = None,
+    daily_cap: int = DAILY_CAP,
+    rescore_above: int | None = None,
 ) -> dict:
-    """Score jobs without a score row (JSearch-targeted first), capped per day."""
+    """Score jobs without a score row (JSearch-targeted first), capped per day.
+
+    rescore_above=N re-judges jobs whose LATEST score >= N instead (appends new
+    score rows; latest wins) — used after criteria/prompt changes."""
     remaining = max(0, daily_cap - store.scores_today(conn))
     budget = min(limit, remaining) if limit is not None else remaining
-    rows = store.unscored_jobs(conn, limit=budget)
+    if rescore_above is not None:
+        rows = store.jobs_with_latest_score_at_least(conn, rescore_above, limit=budget)
+    else:
+        rows = store.unscored_jobs(conn, limit=budget)
     criteria_text = criteria.as_prompt_text()
     scored = failed = 0
     spent = 0.0
@@ -62,6 +85,7 @@ def score_unscored(
             failed += 1
             continue
         score, reasons, flags = parse_reply(text)
+        score = apply_policy(score, flags)
         store.insert_score(
             conn,
             row["id"],

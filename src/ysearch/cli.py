@@ -39,14 +39,16 @@ def cmd_doctor() -> int:
     return 0 if ok else 1
 
 
-def cmd_score(limit: int | None, daily_cap: int) -> int:
+def cmd_score(limit: int | None, daily_cap: int, rescore_above: int | None) -> int:
     from ysearch import score as score_mod
 
     config.load_env()
     criteria = config.load_criteria()
     conn = store.connect()
     store.init_db(conn)
-    summary = score_mod.score_unscored(conn, criteria, limit=limit, daily_cap=daily_cap)
+    summary = score_mod.score_unscored(
+        conn, criteria, limit=limit, daily_cap=daily_cap, rescore_above=rescore_above
+    )
     conn.close()
     print(
         f"Scored {summary['scored']} jobs (${summary['spent_usd']});"
@@ -83,6 +85,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="override the per-day score cap (default 100) — explicit budget call",
     )
+    score_p.add_argument(
+        "--rescore-above",
+        type=int,
+        default=None,
+        help="re-judge jobs whose latest score >= N (after criteria/prompt changes)",
+    )
     digest_p = sub.add_parser("digest", help="print the top-N scored jobs as markdown")
     digest_p.add_argument("-n", type=int, default=10)
     sub.add_parser("ui", help="launch the Streamlit app (inbox + shortlist + drafts)")
@@ -102,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "score":
         from ysearch.score import DAILY_CAP
 
-        return cmd_score(args.limit, args.daily_cap or DAILY_CAP)
+        return cmd_score(args.limit, args.daily_cap or DAILY_CAP, args.rescore_above)
     if args.command == "digest":
         return cmd_digest(args.n)
     if args.command == "ui":

@@ -130,7 +130,9 @@ with st.sidebar:
     buckets = st.multiselect("Location buckets", all_buckets, default=[])
     st.caption("Empty bucket filter = all locations.")
 
-tab_inbox, tab_tracker, tab_funnel = st.tabs(["Inbox", "Tracker", "Funnel"])
+tab_inbox, tab_tracker, tab_funnel, tab_settings = st.tabs(
+    ["Inbox", "Tracker", "Funnel", "Settings"]
+)
 
 with tab_inbox:
     rows = store.scored_jobs(conn)
@@ -190,5 +192,82 @@ with tab_funnel:
         for state in tracker.STATES:
             if state in stage_days:
                 st.markdown(f"- **{state}**: {stage_days[state]:.1f} days")
+
+with tab_settings:
+    import os
+
+    st.subheader("API keys")
+    st.caption(
+        "Stored in this folder's `.env` (gitignored) — your keys stay on your machine"
+        " and are never committed or shared. Both have free tiers."
+    )
+    key_specs = [
+        (
+            "OPENWEBNINJA_API_KEY",
+            "OpenWeb Ninja key (job discovery)",
+            "Free at openwebninja.com/api/jsearch — 200 requests/month, no card.",
+        ),
+        (
+            "OPENROUTER_API_KEY",
+            "OpenRouter key (scoring + drafts)",
+            "Create at openrouter.ai/settings/keys — scoring costs ~$0.003/job.",
+        ),
+    ]
+    key_inputs: dict[str, str] = {}
+    for env_name, label, hint in key_specs:
+        is_set = bool(os.environ.get(env_name))
+        key_inputs[env_name] = st.text_input(
+            label + (" — ✓ currently set" if is_set else " — not set"),
+            type="password",
+            help=hint,
+            key=f"key-{env_name}",
+        )
+    if st.button("Save keys"):
+        config.save_env_values(key_inputs)
+        st.success("Saved to .env — keys are active now.")
+        st.rerun()
+
+    st.subheader("Resume")
+    st.caption("Used to ground cover-note drafts — the AI may only claim what's in here.")
+    try:
+        existing_resume = config.load_resume()
+    except FileNotFoundError:
+        existing_resume = ""
+    resume_text = st.text_area(
+        "Paste your resume (plain text / markdown)", value=existing_resume, height=280
+    )
+    if st.button("Save resume") and resume_text.strip():
+        config.save_resume(resume_text)
+        st.success("Resume saved to config/resume.md (gitignored).")
+
+    st.subheader("Criteria")
+    st.caption(
+        "What the scorer judges every posting against. Describe what you want and"
+        " let the AI draft it — then review and save. Nothing saves without your click."
+    )
+    description = st.text_area(
+        "Describe what you're looking for — roles, cities, remote, salary floor,"
+        " your years of experience",
+        key="criteria-description",
+        placeholder="e.g. AI product manager or forward-deployed roles, remote or Chennai/"
+        "Bangalore, 12 LPA minimum, I have 1.5 years of experience...",
+    )
+    if st.button("Generate criteria with AI (~$0.001)") and description.strip():
+        from ysearch import onboard
+
+        with st.spinner("Drafting criteria..."):
+            st.session_state["criteria-editor"] = onboard.generate_criteria_yaml(
+                description, resume_text or None
+            )
+        st.rerun()
+    if "criteria-editor" not in st.session_state:
+        st.session_state["criteria-editor"] = config.criteria_yaml_text()
+    st.text_area("criteria.yaml (review and edit before saving)", height=320, key="criteria-editor")
+    if st.button("Save criteria"):
+        try:
+            config.save_criteria_yaml(st.session_state["criteria-editor"])
+            st.success("Criteria validated and saved.")
+        except Exception as exc:
+            st.error(f"Not saved — {exc}")
 
 conn.close()

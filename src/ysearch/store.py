@@ -227,22 +227,42 @@ def scores_today(conn: sqlite3.Connection) -> int:
 
 def top_scored(conn: sqlite3.Connection, n: int = 10) -> list[sqlite3.Row]:
     return conn.execute(
-        """SELECT j.*, s.score, s.fit_reasons, s.flags FROM jobs j
-           JOIN scores s ON s.job_id = j.id
+        f"""SELECT j.*, s.score, s.fit_reasons, s.flags FROM jobs j
+           {_LATEST_SCORE_JOIN}
            WHERE s.score IS NOT NULL
            ORDER BY s.score DESC, j.first_seen DESC LIMIT ?""",
         (n,),
     ).fetchall()
 
 
+# Rescoring appends new score rows; the LATEST row per job is the verdict.
+_LATEST_SCORE_JOIN = """
+    JOIN (SELECT job_id, MAX(rowid) AS rid FROM scores GROUP BY job_id) latest
+      ON latest.job_id = j.id
+    JOIN scores s ON s.rowid = latest.rid
+"""
+
+
 def scored_jobs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """All jobs with a numeric score, best first (UI inbox)."""
+    """Jobs whose LATEST score is numeric, best first (UI inbox)."""
     return conn.execute(
-        """SELECT j.*, s.score, s.fit_reasons, s.flags FROM jobs j
-           JOIN scores s ON s.job_id = j.id
+        f"""SELECT j.*, s.score, s.fit_reasons, s.flags FROM jobs j
+           {_LATEST_SCORE_JOIN}
            WHERE s.score IS NOT NULL
            ORDER BY s.score DESC, j.first_seen DESC"""
     ).fetchall()
+
+
+def jobs_with_latest_score_at_least(
+    conn: sqlite3.Connection, min_score: int, limit: int | None = None
+) -> list[sqlite3.Row]:
+    """Jobs whose latest score >= min_score — the rescore candidate set."""
+    sql = f"""SELECT j.* FROM jobs j
+              {_LATEST_SCORE_JOIN}
+              WHERE s.score >= ? ORDER BY s.score DESC"""
+    if limit is not None:
+        sql += f" LIMIT {int(limit)}"
+    return conn.execute(sql, (min_score,)).fetchall()
 
 
 def add_note(conn: sqlite3.Connection, job_id: int, body_md: str) -> None:

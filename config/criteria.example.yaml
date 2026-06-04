@@ -21,5 +21,6 @@ locations:
   - Bangalore
   - Remote
 salary_floor_lpa: 12 # scoring input only (flags below_floor / salary_unknown) — NEVER a hard filter
+years_experience: 2 # your experience in years — postings requiring materially more get capped at 60
 positive_keywords: [LLM, RAG, agents, prompt engineering, automation, MCP, evals]
 negative_keywords: ["10+ years", director]

@@ -29,6 +29,13 @@ Salary: if stated and below the owner's floor, still score the job on its
 merits and add the "below_floor" flag; if no salary is stated, add
 "salary_unknown". Never zero a score because of salary alone.
 
+Seniority: the criteria state the owner's years of experience. Check the
+posting's stated requirements carefully (e.g. "5+ years", "senior", "staff",
+"principal"). If the posting requires materially more experience than the
+owner has (roughly 2x, or 3+ years above), add the "seniority_mismatch" flag
+and score the job 60 or below — a great role the owner cannot pass screening
+for is not a great match.
+
 Reply with ONLY a JSON object, no prose:
 {"score": <integer 0-100>,
  "fit_reasons": [<up to 4 short strings>],
@@ -53,6 +60,33 @@ no "I am writing to express..." openers — open with substance.
 ## Emphasize these resume points
 3-4 bullets: which resume facts to lead with for this posting, one line each.
 """
+
+
+CRITERIA_SYSTEM = """You convert a job-seeker's freeform description (and
+optional resume) into search criteria for the ysearch job scout, as YAML.
+
+Fields:
+- queries: 1-3 search strings for the core target roles (run daily)
+- rotating_queries: up to 6 more, round-robin; use the mapping form
+  {q: "<role> in <city>", remote: false} for on-site city passes
+- rotate_per_scan: integer; keep len(queries) + rotate_per_scan <= 6
+  (each query costs one request of a 200/month free quota)
+- country: ISO 3166-1 alpha-2 (e.g. in, us)
+- remote_ok: boolean
+- locations: list of city names / "Remote"
+- salary_floor_lpa: number, omit if unknown (it flags, never filters)
+- years_experience: number, the seeker's experience in years (omit if unknown)
+- positive_keywords / negative_keywords: lists
+
+Reply with ONLY the YAML document. No markdown fences, no prose.
+"""
+
+
+def build_criteria_user_prompt(description: str, resume_text: str | None = None) -> str:
+    prompt = f"What I'm looking for:\n{description}"
+    if resume_text:
+        prompt += f"\n\nMy resume:\n{resume_text}"
+    return prompt
 
 
 def build_score_user_prompt(criteria_text: str, posting_text: str) -> str:

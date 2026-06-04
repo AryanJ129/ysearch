@@ -1,4 +1,9 @@
-"""Config loading: .env secrets + YAML criteria/companies, pydantic-validated."""
+"""Config loading + saving: .env secrets, YAML criteria/companies, resume.
+
+The Settings tab writes through the save_* helpers so everything stays in the
+same gitignored files the CLI reads — keys and personal data never leave the
+user's machine and can never be committed (see .gitignore).
+"""
 
 from __future__ import annotations
 
@@ -32,6 +37,9 @@ class Criteria(BaseModel):
     locations: list[str] = Field(default_factory=list)
     # Scoring input only — flags below_floor / salary_unknown. NEVER a hard filter.
     salary_floor_lpa: float | None = None
+    # Owner's professional experience in years — drives the seniority filter:
+    # postings requiring materially more get seniority_mismatch + a score cap.
+    years_experience: float | None = None
     positive_keywords: list[str] = Field(default_factory=list)
     negative_keywords: list[str] = Field(default_factory=list)
 
@@ -51,6 +59,11 @@ class Criteria(BaseModel):
             f"Locations: {', '.join(self.locations) or 'any'}"
             + (" (remote OK)" if self.remote_ok else ""),
         ]
+        if self.years_experience is not None:
+            parts.append(
+                f"Owner experience: ~{self.years_experience} years — flag and cap"
+                " postings that require materially more (see seniority rule)."
+            )
         if self.salary_floor_lpa is not None:
             parts.append(f"Salary floor: {self.salary_floor_lpa} LPA (flag, don't filter)")
         if self.positive_keywords:
@@ -78,6 +91,33 @@ def load_env(dotenv_path: Path | str | None = None) -> None:
     os.environ.update({k: v for k, v in values.items() if v})
 
 
+def save_env_values(updates: dict[str, str], path: Path | str = ".env") -> None:
+    """Update or append KEY=VALUE lines in .env, preserving everything else.
+
+    Also applies the values to the running process so a UI save takes effect
+    without a restart. Empty values are ignored (never clobber).
+    """
+    updates = {k: v.strip() for k, v in updates.items() if v and v.strip()}
+    if not updates:
+        return
+    path = Path(path)
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    done: set[str] = set()
+    out: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if "=" in stripped and not stripped.startswith("#"):
+            key = stripped.split("=", 1)[0].strip()
+            if key in updates:
+                out.append(f"{key}={updates[key]}")
+                done.add(key)
+                continue
+        out.append(line)
+    out += [f"{k}={v}" for k, v in updates.items() if k not in done]
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    os.environ.update(updates)
+
+
 def _load_yaml(path: Path) -> dict:
     if not path.exists():
         example = path.with_name(f"{path.stem}.example{path.suffix}")
@@ -89,15 +129,44 @@ def load_criteria(path: Path | None = None) -> Criteria:
     return Criteria(**_load_yaml(path or CONFIG_DIR / "criteria.yaml"))
 
 
+def load_companies(path: Path | None = None) -> Companies:
+    return Companies(**_load_yaml(path or CONFIG_DIR / "companies.yaml"))
+
+
 def load_resume(path: Path | None = None) -> str:
     """Plain-text resume used to ground cover-note drafts. Gitignored."""
     path = path or CONFIG_DIR / "resume.md"
     if not path.exists():
         raise FileNotFoundError(
-            f"{path} not found — copy resume.example.md to resume.md and paste your resume."
+            f"{path} not found — paste your resume in the Settings tab or copy"
+            " resume.example.md to resume.md."
         )
     return path.read_text(encoding="utf-8")
 
 
-def load_companies(path: Path | None = None) -> Companies:
-    return Companies(**_load_yaml(path or CONFIG_DIR / "companies.yaml"))
+def save_resume(text: str, path: Path | None = None) -> None:
+    path = path or CONFIG_DIR / "resume.md"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def criteria_yaml_text(path: Path | None = None) -> str:
+    """Raw criteria.yaml text for the Settings editor (falls back to the
+    example, then empty)."""
+    path = path or CONFIG_DIR / "criteria.yaml"
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    example = path.with_name(f"{path.stem}.example{path.suffix}")
+    return example.read_text(encoding="utf-8") if example.exists() else ""
+
+
+def save_criteria_yaml(text: str, path: Path | None = None) -> Criteria:
+    """Validate criteria YAML (raises with a clear message) and save it."""
+    data = yaml.safe_load(text)
+    if not isinstance(data, dict):
+        raise ValueError("Criteria must be a YAML mapping (key: value pairs).")
+    criteria = Criteria(**data)  # raises pydantic.ValidationError on bad shape
+    path = path or CONFIG_DIR / "criteria.yaml"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+    return criteria
