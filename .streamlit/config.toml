@@ -1,0 +1,7 @@
+# Hide Streamlit's stock Deploy button + menu (Community Cloud is not ours)
+# and opt out of usage telemetry.
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

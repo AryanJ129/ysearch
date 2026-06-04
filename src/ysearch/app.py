@@ -64,7 +64,13 @@ def _details(row) -> None:
 def _draft_section(row) -> None:
     draft = drafts.existing_draft(conn, row["id"])
     if draft:
-        st.text_area("Draft (copy from here)", draft, height=320, key=f"draft-{row['id']}")
+        note, coaching = drafts.split_draft(draft)
+        st.text_area(
+            "Cover note (plain text — copy this)", note, height=260, key=f"draft-{row['id']}"
+        )
+        if coaching:
+            with st.expander("For your eyes only — points to emphasize (NOT part of the note)"):
+                st.markdown(coaching)
         label = "Regenerate draft (~$0.002)"
     else:
         label = "Draft cover note (~$0.002)"
@@ -130,8 +136,8 @@ with st.sidebar:
     buckets = st.multiselect("Location buckets", all_buckets, default=[])
     st.caption("Empty bucket filter = all locations.")
 
-tab_inbox, tab_tracker, tab_funnel, tab_settings = st.tabs(
-    ["Inbox", "Tracker", "Funnel", "Settings"]
+tab_inbox, tab_tracker, tab_funnel, tab_settings, tab_help = st.tabs(
+    ["Inbox", "Tracker", "Funnel", "Settings", "Help"]
 )
 
 with tab_inbox:
@@ -351,5 +357,15 @@ with tab_settings:
             st.success("Criteria validated and saved.")
         except Exception as exc:
             st.error(f"Not saved — {exc}")
+
+with tab_help:
+    from pathlib import Path
+
+    readme = Path("README.md")
+    if readme.exists():
+        # Single source of truth: the Help tab IS the README, never a copy.
+        st.markdown(readme.read_text(encoding="utf-8"))
+    else:
+        st.info("README.md not found next to the app — see the repository for the guide.")
 
 conn.close()
