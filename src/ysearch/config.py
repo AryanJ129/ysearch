@@ -87,7 +87,11 @@ def load_env(dotenv_path: Path | str | None = None) -> None:
     .env.example) never clobber shell values. python-dotenv's default does
     neither: it silently ignores .env when the shell already exports the name.
     """
-    values = dotenv_values(dotenv_path) if dotenv_path else dotenv_values()
+    # Explicit "./.env" — dotenv's no-arg mode WALKS UP the directory tree and
+    # can load a .env from a parent (it found the real keys from inside a
+    # chdir'd test tmpdir). Config is cwd-relative everywhere else; the env
+    # must be too.
+    values = dotenv_values(dotenv_path if dotenv_path is not None else ".env")
     os.environ.update({k: v for k, v in values.items() if v})
 
 

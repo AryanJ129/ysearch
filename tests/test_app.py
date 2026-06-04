@@ -52,3 +52,32 @@ def test_app_renders_scored_job_and_shortlist_state(tmp_path, monkeypatch):
     # Funnel metrics render with the seeded pipeline.
     metric_labels = [m.label for m in at.metric]
     assert "In pipeline" in metric_labels and "Response rate" in metric_labels
+
+
+def test_refresh_button_runs_scan_and_score(tmp_path, monkeypatch):
+    """The in-app Scan + score button. All source toggles disabled → scan.run()
+    touches no network, score finds nothing unscored — the full refresh path
+    executes hermetically. Belt-and-braces: keys are stripped from the env so
+    an accidental network path could only fail loudly, never spend."""
+    monkeypatch.chdir(tmp_path)
+    for key in ("OPENWEBNINJA_API_KEY", "OPENROUTER_API_KEY", "RAPIDAPI_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    from ysearch import scan, store
+
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "criteria.yaml").write_text("queries: ['AI PM']\n")
+    (tmp_path / "config" / "companies.yaml").write_text("greenhouse: []\n")
+    conn = store.connect(tmp_path / "ysearch.db")
+    store.init_db(conn)
+    for source in scan.SOURCE_TOGGLES:
+        scan.set_source_enabled(conn, source, False)  # commits (UI-rerun safe)
+    conn.close()
+
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.run()
+    at.button(key="refresh-btn").click().run()
+    assert not at.exception
+    # Scan ran for real: it stamped last_scan_at despite all sources being off.
+    conn = store.connect(tmp_path / "ysearch.db")
+    assert store.get_meta(conn, "last_scan_at") is not None
+    conn.close()

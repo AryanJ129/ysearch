@@ -28,3 +28,16 @@ def test_missing_dotenv_is_fine(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "from-shell")
     config.load_env(tmp_path / "no-such.env")
     assert os.environ["OPENROUTER_API_KEY"] == "from-shell"
+
+
+def test_load_env_never_walks_up_the_tree(tmp_path, monkeypatch):
+    """Anti-regression: dotenv's no-arg mode searches parent directories — it
+    loaded the REAL repo .env from inside a test tmpdir, making 'hermetic'
+    tests spend real quota and real LLM money. cwd's .env only, ever."""
+    (tmp_path / ".env").write_text("LEAKY_PARENT_KEY=oops\n")
+    child = tmp_path / "child"
+    child.mkdir()
+    monkeypatch.chdir(child)
+    monkeypatch.delenv("LEAKY_PARENT_KEY", raising=False)
+    config.load_env()
+    assert "LEAKY_PARENT_KEY" not in os.environ

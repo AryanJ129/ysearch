@@ -27,10 +27,43 @@ total_scored = conn.execute(
 last_scan = store.get_meta(conn, "last_scan_at") or "never"
 
 st.title("ysearch")
-st.caption(
-    f"{total_jobs} jobs · {total_scored} scored · last scan: {last_scan} — "
-    "run `ysearch scan && ysearch score` from the CLI to refresh"
-)
+col_status, col_refresh = st.columns([4, 1], vertical_alignment="center")
+with col_status:
+    st.caption(
+        f"{total_jobs} jobs · {total_scored} scored · last scan: {last_scan} — "
+        "refresh here or run `ysearch scan && ysearch score` in a terminal"
+    )
+with col_refresh:
+    refresh_clicked = st.button(
+        "Scan + score",
+        key="refresh-btn",
+        help="Runs a full scan (~4 JSearch quota requests) then scores new jobs (~$0.003 each).",
+    )
+if refresh_clicked:
+    # Runs BEFORE the tabs render, so this same pass shows the fresh data.
+    import io
+    from contextlib import redirect_stdout
+
+    from ysearch import scan
+    from ysearch import score as score_mod
+
+    try:
+        with st.status("Scanning sources...", expanded=True) as refresh_status:
+            log_buffer = io.StringIO()
+            with redirect_stdout(log_buffer):
+                scan.run()
+            st.code(log_buffer.getvalue(), language=None)
+            refresh_status.update(label="Scoring new jobs...")
+            summary = score_mod.score_unscored(conn, config.load_criteria())
+            refresh_status.update(
+                label=(
+                    f"Done — scored {summary['scored']} new jobs"
+                    f" (${summary['spent_usd']}), {summary['failed']} failed"
+                ),
+                state="complete",
+            )
+    except Exception as exc:
+        st.error(f"Refresh failed: {exc}")
 
 
 def _flags(row) -> list[str]:
@@ -55,7 +88,10 @@ def _details(row) -> None:
         for reason in _reasons(row):
             st.markdown(f"- {reason}")
         if row["description"]:
-            st.text(row["description"][:1500])
+            # Full description, scrollable — a hard [:1500] slice cut postings
+            # off mid-sentence.
+            with st.container(height=300, border=False):
+                st.text(row["description"])
         urls = json.loads(row["source_urls"] or "[]")
         if len(urls) > 1:
             st.caption("Also seen at: " + " · ".join(u for u in urls if u != row["primary_url"]))

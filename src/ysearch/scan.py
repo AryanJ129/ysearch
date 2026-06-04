@@ -46,6 +46,9 @@ def set_source_enabled(conn, source: str, enabled: bool) -> None:
     if source not in SOURCE_TOGGLES:
         raise ValueError(f"Unknown source {source!r} — one of {SOURCE_TOGGLES}")
     store.set_meta(conn, f"source_enabled_{source}", "1" if enabled else "0")
+    # COMMIT here: the Streamlit UI opens a fresh connection every rerun, so an
+    # uncommitted toggle write would silently roll back when this conn closes.
+    conn.commit()
 
 
 def build_query_plan(criteria: Criteria, conn) -> list[QuerySpec]:
