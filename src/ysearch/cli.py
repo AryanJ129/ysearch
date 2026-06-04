@@ -39,14 +39,14 @@ def cmd_doctor() -> int:
     return 0 if ok else 1
 
 
-def cmd_score(limit: int | None) -> int:
+def cmd_score(limit: int | None, daily_cap: int) -> int:
     from ysearch import score as score_mod
 
     config.load_env()
     criteria = config.load_criteria()
     conn = store.connect()
     store.init_db(conn)
-    summary = score_mod.score_unscored(conn, criteria, limit=limit)
+    summary = score_mod.score_unscored(conn, criteria, limit=limit, daily_cap=daily_cap)
     conn.close()
     print(
         f"Scored {summary['scored']} jobs (${summary['spent_usd']});"
@@ -77,6 +77,12 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("scan", help="ingest JSearch (rotating plan) + ATS boards into the db")
     score_p = sub.add_parser("score", help="LLM-score unscored jobs (daily cap applies)")
     score_p.add_argument("--limit", type=int, default=None, help="max jobs to score this run")
+    score_p.add_argument(
+        "--daily-cap",
+        type=int,
+        default=None,
+        help="override the per-day score cap (default 100) — explicit budget call",
+    )
     digest_p = sub.add_parser("digest", help="print the top-N scored jobs as markdown")
     digest_p.add_argument("-n", type=int, default=10)
     sub.add_parser("ui", help="(next increment) launch the Streamlit app")
@@ -94,7 +100,9 @@ def main(argv: list[str] | None = None) -> int:
         config.load_env()
         return scan.run()
     if args.command == "score":
-        return cmd_score(args.limit)
+        from ysearch.score import DAILY_CAP
+
+        return cmd_score(args.limit, args.daily_cap or DAILY_CAP)
     if args.command == "digest":
         return cmd_digest(args.n)
     if args.command == "ui":

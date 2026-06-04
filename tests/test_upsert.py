@@ -58,6 +58,28 @@ def test_merge_fills_null_salary_only(tmp_path):
     assert row["salary_max"] == 2000000.0  # null filled
 
 
+def test_unscored_prioritizes_jsearch_over_ats_fill(tmp_path):
+    """Query-targeted JSearch jobs must score before ATS board fill, even when
+    the ATS rows are newer — otherwise a 180-role board starves the daily cap."""
+    conn = _conn(tmp_path)
+    store.upsert_job(
+        conn,
+        _job(source="jsearch", title="targeted"),
+        bucket="b",
+        key="k-jsearch",
+        raw_json='{"source": "jsearch"}',
+    )
+    store.upsert_job(
+        conn,
+        _job(source="greenhouse", title="board fill", url="https://boards.greenhouse.io/x"),
+        bucket="b",
+        key="k-ats",
+        raw_json='{"source": "greenhouse"}',
+    )
+    rows = store.unscored_jobs(conn)
+    assert [r["title"] for r in rows] == ["targeted", "board fill"]
+
+
 def test_meta_roundtrip(tmp_path):
     conn = _conn(tmp_path)
     assert store.get_meta(conn, "rotation_cursor") is None

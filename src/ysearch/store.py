@@ -190,8 +190,13 @@ def upsert_job(
 
 
 def unscored_jobs(conn: sqlite3.Connection, limit: int | None = None) -> list[sqlite3.Row]:
+    # JSearch rows first: they're query-targeted (the owner's actual searches);
+    # ATS board fill scores after. Without this, a big ATS ingest starves the
+    # targeted jobs out of the daily cap.
     sql = """SELECT j.* FROM jobs j LEFT JOIN scores s ON s.job_id = j.id
-             WHERE s.job_id IS NULL ORDER BY j.first_seen DESC"""
+             WHERE s.job_id IS NULL
+             ORDER BY (json_extract(j.raw_json, '$.source') = 'jsearch') DESC,
+                      j.first_seen DESC"""
     if limit is not None:
         sql += f" LIMIT {int(limit)}"
     return conn.execute(sql).fetchall()
