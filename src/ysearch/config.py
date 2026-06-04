@@ -89,5 +89,15 @@ def load_criteria(path: Path | None = None) -> Criteria:
     return Criteria(**_load_yaml(path or CONFIG_DIR / "criteria.yaml"))
 
 
+def load_resume(path: Path | None = None) -> str:
+    """Plain-text resume used to ground cover-note drafts. Gitignored."""
+    path = path or CONFIG_DIR / "resume.md"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found — copy resume.example.md to resume.md and paste your resume."
+        )
+    return path.read_text(encoding="utf-8")
+
+
 def load_companies(path: Path | None = None) -> Companies:
     return Companies(**_load_yaml(path or CONFIG_DIR / "companies.yaml"))

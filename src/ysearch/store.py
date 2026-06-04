@@ -235,6 +235,27 @@ def top_scored(conn: sqlite3.Connection, n: int = 10) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def scored_jobs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """All jobs with a numeric score, best first (UI inbox)."""
+    return conn.execute(
+        """SELECT j.*, s.score, s.fit_reasons, s.flags FROM jobs j
+           JOIN scores s ON s.job_id = j.id
+           WHERE s.score IS NOT NULL
+           ORDER BY s.score DESC, j.first_seen DESC"""
+    ).fetchall()
+
+
+def add_note(conn: sqlite3.Connection, job_id: int, body_md: str) -> None:
+    conn.execute("INSERT INTO notes (job_id, body_md) VALUES (?, ?)", (job_id, body_md))
+    conn.commit()
+
+
+def notes_for_job(conn: sqlite3.Connection, job_id: int) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM notes WHERE job_id = ? ORDER BY created_at DESC, id DESC", (job_id,)
+    ).fetchall()
+
+
 def get_meta(conn: sqlite3.Connection, key: str) -> str | None:
     row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
     return row["value"] if row else None

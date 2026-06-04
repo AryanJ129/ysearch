@@ -9,6 +9,7 @@ irrelevant rows (counts are printed, nothing is silently dropped).
 
 from __future__ import annotations
 
+import datetime
 import json
 import re
 
@@ -95,6 +96,11 @@ def run() -> int:
                 f" (title filter) — {new} new, {merged} merged"
             )
 
+    store.set_meta(
+        conn,
+        "last_scan_at",
+        datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+    )
     conn.commit()
     total_rows = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
     print(f"Scan done: {total_new} new, {total_merged} merged, {total_rows} jobs in db.")

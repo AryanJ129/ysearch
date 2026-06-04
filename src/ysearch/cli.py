@@ -85,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     digest_p = sub.add_parser("digest", help="print the top-N scored jobs as markdown")
     digest_p.add_argument("-n", type=int, default=10)
-    sub.add_parser("ui", help="(next increment) launch the Streamlit app")
+    sub.add_parser("ui", help="launch the Streamlit app (inbox + shortlist + drafts)")
 
     args = parser.parse_args(argv)
     if args.command == "doctor":
@@ -106,8 +106,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "digest":
         return cmd_digest(args.n)
     if args.command == "ui":
-        print("`ui` lands in the next increment (Streamlit inbox + shortlist).")
-        return 1
+        import importlib.util
+        import subprocess
+
+        spec = importlib.util.find_spec("ysearch.app")
+        assert spec and spec.origin, "ysearch.app module not found"
+        return subprocess.call([sys.executable, "-m", "streamlit", "run", spec.origin])
     parser.print_help()
     return 0
 

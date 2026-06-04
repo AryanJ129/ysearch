@@ -7,21 +7,14 @@ unscored so the next run retries it.
 
 from __future__ import annotations
 
-import datetime
 import json
-import os
-from pathlib import Path
 
 import httpx
 
 from ysearch import llm, prompts, store
 from ysearch.config import Criteria
 
-# Claude Haiku 4.5 via OpenRouter, USD per token.
-PRICE_IN = 1e-6
-PRICE_OUT = 5e-6
 DAILY_CAP = 100
-METRICS_PATH = Path("metrics/llm_costs.jsonl")
 
 
 def parse_reply(text: str) -> tuple[int | None, list[str], list[str]]:
@@ -49,55 +42,10 @@ def parse_reply(text: str) -> tuple[int | None, list[str], list[str]]:
     return score, reasons, flags
 
 
-def _call_model(system: str, user: str, *, timeout: float = 60.0) -> tuple[str, float]:
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY not set — scoring needs it.")
-    resp = httpx.post(
-        f"{llm.OPENROUTER_BASE}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={
-            "model": llm.MODEL,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "max_tokens": 300,
-            "temperature": 0,
-        },
-        timeout=timeout,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    text = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
-    usage = data.get("usage") or {}
-    cost = usage.get("prompt_tokens", 0) * PRICE_IN + usage.get("completion_tokens", 0) * PRICE_OUT
-    return text, cost
-
-
-def _posting_text(row) -> str:
-    salary = (
-        f"{row['salary_min']}–{row['salary_max']} {row['currency'] or ''}"
-        if row["salary_min"] is not None or row["salary_max"] is not None
-        else "not stated"
-    )
-    return (
-        f"Title: {row['title']}\nCompany: {row['company']}\n"
-        f"Location: {row['location'] or 'unknown'} (bucket: {row['location_bucket']})\n"
-        f"Salary: {salary}\n\n{row['description'] or ''}"
-    )
-
-
-def _log_metric(entry: dict) -> None:
-    METRICS_PATH.parent.mkdir(exist_ok=True)
-    with METRICS_PATH.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry) + "\n")
-
-
 def score_unscored(
     conn, criteria: Criteria, *, limit: int | None = None, daily_cap: int = DAILY_CAP
 ) -> dict:
-    """Score jobs without a score row, newest first, capped per day."""
+    """Score jobs without a score row (JSearch-targeted first), capped per day."""
     remaining = max(0, daily_cap - store.scores_today(conn))
     budget = min(limit, remaining) if limit is not None else remaining
     rows = store.unscored_jobs(conn, limit=budget)
@@ -105,9 +53,9 @@ def score_unscored(
     scored = failed = 0
     spent = 0.0
     for row in rows:
-        user_prompt = prompts.build_score_user_prompt(criteria_text, _posting_text(row))
+        user_prompt = prompts.build_score_user_prompt(criteria_text, prompts.render_posting(row))
         try:
-            text, cost = _call_model(prompts.SCORE_SYSTEM, user_prompt)
+            text, cost = llm.chat(prompts.SCORE_SYSTEM, user_prompt)
         except (httpx.HTTPError, RuntimeError) as exc:
             # Leave unscored — the next run retries.
             print(f"  [!!] job {row['id']} ({row['title'][:40]!r}): {exc}")
@@ -125,15 +73,7 @@ def score_unscored(
         )
         spent += cost
         scored += 1
-        _log_metric(
-            {
-                "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "job_id": row["id"],
-                "score": score,
-                "model": llm.MODEL,
-                "cost_usd": round(cost, 6),
-            }
-        )
+        llm.log_cost("score", job_id=row["id"], cost_usd=cost, score=score)
     conn.commit()
     return {
         "scored": scored,
