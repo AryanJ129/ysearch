@@ -39,6 +39,32 @@ def cmd_doctor() -> int:
     return 0 if ok else 1
 
 
+def cmd_score(limit: int | None) -> int:
+    from ysearch import score as score_mod
+
+    config.load_env()
+    criteria = config.load_criteria()
+    conn = store.connect()
+    store.init_db(conn)
+    summary = score_mod.score_unscored(conn, criteria, limit=limit)
+    conn.close()
+    print(
+        f"Scored {summary['scored']} jobs (${summary['spent_usd']});"
+        f" {summary['failed']} failed; {summary['cap_left']} left in today's cap."
+    )
+    return 0
+
+
+def cmd_digest(n: int) -> int:
+    from ysearch import digest
+
+    conn = store.connect()
+    store.init_db(conn)
+    print(digest.render(conn, n))
+    conn.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ysearch",
@@ -46,11 +72,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("doctor", help="check config, db (WAL), keys, and the OpenRouter model slug")
-    spike_p = sub.add_parser("spike", help="Phase-1 discovery spike: dump raw results for review")
+    spike_p = sub.add_parser("spike", help="discovery spike: dump raw results for review")
     spike_p.add_argument("--per-query", type=int, default=10, help="rows shown per query/board")
-    sub.add_parser("scan", help="(Phase 2) ingest sources into the db")
-    sub.add_parser("digest", help="(Phase 2) markdown top-N digest")
-    sub.add_parser("ui", help="(Phase 2) launch the Streamlit app")
+    sub.add_parser("scan", help="ingest JSearch (rotating plan) + ATS boards into the db")
+    score_p = sub.add_parser("score", help="LLM-score unscored jobs (daily cap applies)")
+    score_p.add_argument("--limit", type=int, default=None, help="max jobs to score this run")
+    digest_p = sub.add_parser("digest", help="print the top-N scored jobs as markdown")
+    digest_p.add_argument("-n", type=int, default=10)
+    sub.add_parser("ui", help="(next increment) launch the Streamlit app")
 
     args = parser.parse_args(argv)
     if args.command == "doctor":
@@ -59,8 +88,17 @@ def main(argv: list[str] | None = None) -> int:
         from ysearch import spike
 
         return spike.run(per_query=args.per_query)
-    if args.command in {"scan", "digest", "ui"}:
-        print(f"`{args.command}` lands in Phase 2 — the spike gate comes first.")
+    if args.command == "scan":
+        from ysearch import scan
+
+        config.load_env()
+        return scan.run()
+    if args.command == "score":
+        return cmd_score(args.limit)
+    if args.command == "digest":
+        return cmd_digest(args.n)
+    if args.command == "ui":
+        print("`ui` lands in the next increment (Streamlit inbox + shortlist).")
         return 1
     parser.print_help()
     return 0

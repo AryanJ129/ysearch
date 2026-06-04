@@ -1,14 +1,25 @@
 # Copy to config/criteria.yaml and edit. criteria.yaml is gitignored — it's personal.
-# queries run against JSearch — keep the list small; the free tier is 200 requests/month.
+# Each query = 1 JSearch request; the free tier is 200 requests/month.
+# Cadence math: len(queries) + rotate_per_scan requests per daily scan.
+
+# Daily pass — run on EVERY scan. Keep small.
 queries:
   - "AI product manager"
   - "forward deployed engineer"
-country: in            # ISO 3166-1 alpha-2 country code for JSearch
-remote_ok: true        # include work-from-home results
+
+# Rotation pool — rotate_per_scan of these run each scan, round-robin.
+# Plain strings inherit remote_ok; use the mapping form for on-site passes.
+rotating_queries:
+  - "AI solutions engineer"
+  - { q: "AI product manager in Chennai", remote: false }
+rotate_per_scan: 2
+
+country: in # ISO 3166-1 alpha-2 country code for JSearch
+remote_ok: true # default for queries (work-from-home results)
 locations:
   - Chennai
   - Bangalore
   - Remote
-salary_floor_lpa: 12   # scoring input only (flags below_floor / salary_unknown) — NEVER a hard filter
+salary_floor_lpa: 12 # scoring input only (flags below_floor / salary_unknown) — NEVER a hard filter
 positive_keywords: [LLM, RAG, agents, prompt engineering, automation, MCP, evals]
 negative_keywords: ["10+ years", director]

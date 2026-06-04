@@ -7,13 +7,26 @@ from pathlib import Path
 
 import yaml
 from dotenv import dotenv_values
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 CONFIG_DIR = Path("config")
 
 
+class QuerySpec(BaseModel):
+    """One JSearch query. Plain YAML strings coerce to specs; `remote: false`
+    marks an on-site pass (e.g. "AI product manager in Chennai")."""
+
+    q: str
+    remote: bool | None = None  # None → inherit Criteria.remote_ok
+
+
 class Criteria(BaseModel):
-    queries: list[str]
+    # Daily pass — run on EVERY scan. Keep small: each query = 1 quota request.
+    queries: list[QuerySpec]
+    # Rotation pool — rotate_per_scan of these run each scan, round-robin, so
+    # on-site city passes are built into the cadence (not backlog).
+    rotating_queries: list[QuerySpec] = Field(default_factory=list)
+    rotate_per_scan: int = 2
     country: str = "in"
     remote_ok: bool = True
     locations: list[str] = Field(default_factory=list)
@@ -22,10 +35,19 @@ class Criteria(BaseModel):
     positive_keywords: list[str] = Field(default_factory=list)
     negative_keywords: list[str] = Field(default_factory=list)
 
+    @field_validator("queries", "rotating_queries", mode="before")
+    @classmethod
+    def _coerce_strings(cls, value: list) -> list:
+        return [{"q": item} if isinstance(item, str) else item for item in (value or [])]
+
+    def resolved_remote(self, spec: QuerySpec) -> bool:
+        return self.remote_ok if spec.remote is None else spec.remote
+
     def as_prompt_text(self) -> str:
         """Render for the scoring prompt."""
+        all_queries = [s.q for s in self.queries + self.rotating_queries]
         parts = [
-            f"Target queries: {', '.join(self.queries)}",
+            f"Target roles (search queries): {', '.join(all_queries)}",
             f"Locations: {', '.join(self.locations) or 'any'}"
             + (" (remote OK)" if self.remote_ok else ""),
         ]
