@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from pydantic import BaseModel, Field
 
 CONFIG_DIR = Path("config")
@@ -43,8 +44,16 @@ class Companies(BaseModel):
     ashby: list[str] = Field(default_factory=list)
 
 
-def load_env() -> None:
-    load_dotenv()
+def load_env(dotenv_path: Path | str | None = None) -> None:
+    """Load .env with project-wins semantics.
+
+    A filled .env value OVERRIDES a shell-exported var (so a per-project key
+    beats a global one in ~/.zshrc), but blank .env lines (as shipped in
+    .env.example) never clobber shell values. python-dotenv's default does
+    neither: it silently ignores .env when the shell already exports the name.
+    """
+    values = dotenv_values(dotenv_path) if dotenv_path else dotenv_values()
+    os.environ.update({k: v for k, v in values.items() if v})
 
 
 def _load_yaml(path: Path) -> dict:
