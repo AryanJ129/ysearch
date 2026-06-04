@@ -79,9 +79,9 @@ def run(per_query: int = 10) -> int:
                 lines += ["", f"### {query}", f"FAILED: {exc}"]
                 continue
             raw_path = SPIKE_DIR / f"jsearch_{re.sub(r'[^a-z0-9]+', '_', query.lower())}.json"
-            raw_path.write_text(
-                json.dumps([j.model_dump() for j in result.jobs], indent=2), encoding="utf-8"
-            )
+            # Dump the RAW payload, not parsed Jobs — the raw dump is what
+            # diagnoses field-mapping bugs (lesson: job_location vs job_city).
+            raw_path.write_text(json.dumps(result.raw, indent=2), encoding="utf-8")
             lines += ["", f"### {query} — {len(result.jobs)} results", _TABLE_HEADER]
             lines += [_row(j) for j in result.jobs[:per_query]]
             if result.quota_headers:

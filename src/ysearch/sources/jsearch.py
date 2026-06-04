@@ -33,6 +33,9 @@ PROVIDERS: dict[str, dict[str, str]] = {
 class SearchResult:
     jobs: list[Job] = field(default_factory=list)
     quota_headers: dict[str, str] = field(default_factory=dict)
+    # Untransformed API payload — diagnostic artifacts must capture the INPUT
+    # of a transformation, not its output (the spike dumps this).
+    raw: dict = field(default_factory=dict)
 
 
 def current_provider() -> str:
@@ -55,9 +58,11 @@ def _headers(provider: str, api_key: str) -> dict[str, str]:
 def parse_jobs(payload: dict) -> list[Job]:
     jobs: list[Job] = []
     for row in payload.get("data") or []:
+        # job_location is the populated field on the direct portal ("Anywhere"
+        # for remote jobs); job_city/job_state/job_country come back null there.
         city = row.get("job_city") or ""
         country = row.get("job_country") or ""
-        location = ", ".join(p for p in (city, country) if p) or None
+        location = row.get("job_location") or ", ".join(p for p in (city, country) if p) or None
         jobs.append(
             Job(
                 source="jsearch",
@@ -108,5 +113,8 @@ def search(
         timeout=timeout,
     )
     resp.raise_for_status()
+    # NOTE: the direct portal sends no rate-limit headers — quota visibility is
+    # dashboard-only, so cadence stays conservatively designed client-side.
     quota = {k: v for k, v in resp.headers.items() if "limit" in k.lower() or "quota" in k.lower()}
-    return SearchResult(jobs=parse_jobs(resp.json()), quota_headers=quota)
+    payload = resp.json()
+    return SearchResult(jobs=parse_jobs(payload), quota_headers=quota, raw=payload)

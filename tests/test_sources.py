@@ -16,21 +16,36 @@ JSEARCH_PAYLOAD = {
             "job_description": "Build AI products.",
         },
         {"job_title": None, "employer_name": None},  # degenerate row must not crash
+        {
+            # Direct-portal shape: job_location populated, city/country null.
+            "job_title": "FDE",
+            "employer_name": "Acme",
+            "job_location": "Anywhere",
+            "job_city": None,
+            "job_country": None,
+        },
     ]
 }
 
 
 def test_jsearch_parse():
     jobs = jsearch.parse_jobs(JSEARCH_PAYLOAD)
-    assert len(jobs) == 2
+    assert len(jobs) == 3
     job = jobs[0]
     assert job.source == "jsearch"
     assert job.title == "AI Product Manager"
-    assert job.location == "Chennai, IN"
+    assert job.location == "Chennai, IN"  # city+country fallback (RapidAPI shape)
     assert job.remote is True
     assert job.salary_min == 1500000
     assert jobs[1].title == "(untitled)"
     assert jobs[1].company == "(unknown)"
+
+
+def test_jsearch_parse_prefers_job_location():
+    """Anti-regression: the direct portal nulls job_city/job_country and puts
+    the value in job_location — parsing city/country alone loses all locations."""
+    jobs = jsearch.parse_jobs(JSEARCH_PAYLOAD)
+    assert jobs[2].location == "Anywhere"
 
 
 def test_jsearch_parse_empty():
