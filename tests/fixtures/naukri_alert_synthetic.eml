@@ -1,0 +1,31 @@
+From: Naukri Job Alerts <info@naukri.com>
+To: owner@example.com
+Subject: 3 new AI Product Manager jobs matching your alert
+Date: Wed, 04 Jun 2026 09:30:00 +0530
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+<html>
+  <body>
+    <h2>Jobs matching your alert: AI Product Manager</h2>
+    <div class="jobTuple">
+      <a class="title" href="https://www.naukri.com/job-listings-ai-product-manager-acme-ai-technologies-chennai-1-to-3-years-040626900001?src=alert">AI Product Manager</a>
+      <span class="comp">Acme AI Technologies</span>
+      <span class="loc">Chennai</span>
+      <span class="exp">1-3 Yrs</span>
+      <p class="desc">Drive the AI product roadmap and ship LLM-powered features with a small team.</p>
+    </div>
+    <div class="jobTuple">
+      <a class="title" href="https://www.naukri.com/job-listings-forward-deployed-engineer-nimbus-systems-bengaluru-2-to-4-years-040626900002?src=alert">Forward Deployed Engineer</a>
+      <span class="comp">Nimbus Systems</span>
+      <span class="loc">Bengaluru</span>
+      <span class="exp">2-4 Yrs</span>
+      <p class="desc">Deploy AI agents at customer sites, own integrations end to end.</p>
+    </div>
+    <div class="promo">
+      <a class="title" href="https://www.naukri.com/job-listings-untagged-job-040626900003">Untagged Listing</a>
+    </div>
+    <p><a href="https://www.naukri.com/mnjuser/settings">Manage your alerts</a></p>
+  </body>
+</html>

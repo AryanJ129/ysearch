@@ -51,6 +51,13 @@ def mask_key(value: str | None) -> str:
     return f"{value[:6]}…{value[-4:]}"
 
 
+def mask_secret(value: str | None) -> str:
+    """Stricter mask for passwords (no identifying prefix): ••••…last4."""
+    if not value:
+        return "not set"
+    return f"••••…{value[-4:]}" if len(value) > 8 else "••••"
+
+
 def check_key(api_key: str | None = None) -> tuple[bool, str]:
     """Validate an OpenRouter key via GET /key — authenticated but FREE
     (no tokens spent). Returns (ok, human detail)."""

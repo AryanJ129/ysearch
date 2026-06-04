@@ -15,9 +15,11 @@ import re
 
 import httpx
 
+import imaplib
+
 from ysearch import config, normalize, store
 from ysearch.config import Criteria, QuerySpec
-from ysearch.sources import ats, jsearch
+from ysearch.sources import ats, email_naukri, jsearch
 
 # Same crude filter the spike used — broad on purpose; the scorer judges fit.
 ATS_TITLE_FILTER = re.compile(
@@ -118,6 +120,23 @@ def run() -> int:
                 f"  [ok] {kind}:{slug}: kept {len(kept)}/{len(jobs)} roles"
                 f" (title filter) — {new} new, {merged} merged"
             )
+
+    if sources["naukri"]:
+        if email_naukri.have_creds():
+            try:
+                naukri_jobs = email_naukri.fetch()
+            except (imaplib.IMAP4.error, OSError) as exc:
+                naukri_jobs = None
+                print(f"  [!!] naukri email: {exc}")
+            if naukri_jobs is not None:
+                new, merged = _ingest(conn, naukri_jobs, country_hint=criteria.country)
+                total_new += new
+                total_merged += merged
+                print(f"  [ok] naukri email: {len(naukri_jobs)} jobs ({new} new, {merged} merged)")
+        else:
+            print("[--] Naukri email: IMAP credentials not set (Settings → Naukri) — skipping.")
+    else:
+        print("[--] Naukri email disabled in Settings — skipping.")
 
     store.set_meta(
         conn,

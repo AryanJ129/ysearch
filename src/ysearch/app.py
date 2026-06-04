@@ -244,7 +244,7 @@ with tab_settings:
     source_labels = {
         "jsearch": "JSearch (Google for Jobs — quota: 200 req/month free)",
         "ats": "ATS boards (Greenhouse / Lever / Ashby — free, no quota)",
-        "naukri": "Naukri alert emails (parser coming — needs Gmail setup)",
+        "naukri": "Naukri alert emails (set up in the section below)",
     }
     for source, label in source_labels.items():
         toggled = st.toggle(label, value=sources_now[source], key=f"src-{source}")
@@ -265,6 +265,49 @@ with tab_settings:
                 st.success("Watchlist validated and saved.")
             except Exception as exc:
                 st.error(f"Not saved — {exc}")
+
+    st.subheader("Naukri / Email alerts")
+    st.caption(
+        "The real Naukri coverage: your naukri.com alerts land in Gmail under a label;"
+        " ysearch reads ONLY that label over IMAP (read-only — nothing is sent, contents"
+        " are never logged). Needs a Gmail app password (2FA required)."
+    )
+    from ysearch.sources import email_naukri
+
+    imap_user, imap_password, imap_label = email_naukri.imap_settings()
+    col_user, col_label = st.columns(2)
+    with col_user:
+        new_imap_user = st.text_input("Gmail address", value=imap_user or "", key="imap-user")
+    with col_label:
+        new_imap_label = st.text_input("IMAP label to watch", value=imap_label, key="imap-label")
+    new_imap_password = st.text_input(
+        "Gmail app password",
+        type="password",
+        key="imap-password",
+        help="Create at myaccount.google.com/apppasswords — requires 2-factor auth.",
+    )
+    st.caption(f"Saved password: `{llm.mask_secret(imap_password)}`")
+    col_email_save, col_email_test = st.columns([1, 2])
+    with col_email_save:
+        if st.button("Save email settings"):
+            config.save_env_values(
+                {
+                    "YSEARCH_IMAP_USER": new_imap_user,
+                    "YSEARCH_IMAP_PASSWORD": new_imap_password,
+                    "YSEARCH_IMAP_LABEL": new_imap_label,
+                }
+            )
+            st.success("Saved to .env — active now.")
+            st.rerun()
+    with col_email_test:
+        if st.button("Test connection"):
+            with st.spinner("Connecting to Gmail..."):
+                ok, detail = email_naukri.test_connection()
+            (st.success if ok else st.error)(detail)
+    st.caption(
+        "Once a real alert email lands under the label, run `ysearch scan` and check the"
+        " parsed rows — the parser is fixture-built and may need mapping to the real format."
+    )
 
     st.subheader("Resume")
     st.caption("Used to ground cover-note drafts — the AI may only claim what's in here.")
