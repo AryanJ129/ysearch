@@ -17,8 +17,10 @@ def test_app_runs_clean_on_empty_db(tmp_path, monkeypatch):
     at.run()
     assert not at.exception
     assert at.title[0].value == "ysearch"
-    # Empty-db shortlist tab shows the hint instead of crashing.
-    assert any("Nothing shortlisted yet" in str(block.value) for block in at.info)
+    # Empty-db Tracker + Funnel tabs show hints instead of crashing.
+    info_texts = " ".join(str(block.value) for block in at.info)
+    assert "No applications yet" in info_texts
+    assert "funnel draws itself" in info_texts
 
 
 def test_app_renders_scored_job_and_shortlist_state(tmp_path, monkeypatch):
@@ -47,3 +49,6 @@ def test_app_renders_scored_job_and_shortlist_state(tmp_path, monkeypatch):
     rendered = " ".join(str(m.value) for m in at.markdown)
     assert "88/100" in rendered and "AI PM" in rendered
     assert "shortlisted" in rendered  # state badge visible
+    # Funnel metrics render with the seeded pipeline.
+    metric_labels = [m.label for m in at.metric]
+    assert "In pipeline" in metric_labels and "Response rate" in metric_labels

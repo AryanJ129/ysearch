@@ -1,4 +1,4 @@
-"""ysearch Streamlit app — Inbox (scored jobs) + Shortlist (drafts, applied).
+"""ysearch Streamlit app — Inbox (scored jobs) · Tracker (pipeline) · Funnel (Sankey).
 
 Launch via `ysearch ui`. Reads/writes the same SQLite db as the CLI; WAL mode
 makes concurrent CLI scans + UI reruns safe. Scan/score stay CLI-only so the
@@ -12,7 +12,7 @@ import json
 
 import streamlit as st
 
-from ysearch import config, drafts, store, tracker
+from ysearch import config, drafts, sankey, store, tracker
 
 st.set_page_config(page_title="ysearch", page_icon="🔭", layout="wide")
 config.load_env()
@@ -61,6 +61,61 @@ def _details(row) -> None:
             st.caption("Also seen at: " + " · ".join(u for u in urls if u != row["primary_url"]))
 
 
+def _draft_section(row) -> None:
+    draft = drafts.existing_draft(conn, row["id"])
+    if draft:
+        st.text_area("Draft (copy from here)", draft, height=320, key=f"draft-{row['id']}")
+        label = "Regenerate draft (~$0.002)"
+    else:
+        label = "Draft cover note (~$0.002)"
+    if st.button(label, key=f"draft-btn-{row['id']}"):
+        with st.spinner("Drafting..."):
+            drafts.generate(conn, row, config.load_resume())
+        st.rerun()
+
+
+def _notes_section(row) -> None:
+    with st.expander("Notes"):
+        for note in store.notes_for_job(conn, row["id"]):
+            if note["body_md"].startswith(drafts.DRAFT_PREFIX):
+                continue  # drafts have their own section
+            st.markdown(note["body_md"])
+            st.caption(note["created_at"])
+            st.divider()
+        new_note = st.text_area(
+            "Add a note (contacts, comp discussed, interview prep...)",
+            key=f"note-new-{row['id']}",
+        )
+        if st.button("Save note", key=f"note-save-{row['id']}") and new_note.strip():
+            store.add_note(conn, row["id"], new_note.strip())
+            st.rerun()
+
+
+def _tracker_card(row) -> None:
+    with st.container(border=True):
+        col_main, col_apply, col_state = st.columns([5, 2, 3])
+        with col_main:
+            st.markdown(f"**{row['title']}** @ {row['company']} · `{row['state']}`")
+            st.caption(row["location"] or row["location_bucket"])
+        with col_apply:
+            if row["primary_url"]:
+                st.link_button("Apply ↗", row["primary_url"])
+        with col_state:
+            current = row["state"]
+            new_state = st.selectbox(
+                "Move to",
+                tracker.STATES,
+                index=tracker.STATES.index(current),
+                key=f"state-{row['application_id']}",
+                label_visibility="collapsed",
+            )
+            if new_state != current and st.button("Move", key=f"move-{row['application_id']}"):
+                tracker.transition(conn, row["id"], new_state)
+                st.rerun()
+        _draft_section(row)
+        _notes_section(row)
+
+
 # --- Sidebar filters ---
 with st.sidebar:
     st.header("Filters")
@@ -75,7 +130,7 @@ with st.sidebar:
     buckets = st.multiselect("Location buckets", all_buckets, default=[])
     st.caption("Empty bucket filter = all locations.")
 
-tab_inbox, tab_shortlist = st.tabs(["Inbox", "Shortlist"])
+tab_inbox, tab_tracker, tab_funnel = st.tabs(["Inbox", "Tracker", "Funnel"])
 
 with tab_inbox:
     rows = store.scored_jobs(conn)
@@ -104,37 +159,36 @@ with tab_inbox:
                     st.write(f"✓ {state}")
             _details(row)
 
-with tab_shortlist:
-    apps = tracker.applications_with_jobs(
-        conn, states=("shortlisted", "applied", "screen", "interview", "offer")
-    )
+with tab_tracker:
+    apps = tracker.applications_with_jobs(conn)
     if not apps:
-        st.info("Nothing shortlisted yet — hit Shortlist on an Inbox job.")
+        st.info("No applications yet — hit Shortlist on an Inbox job.")
     for row in apps:
-        with st.container(border=True):
-            col_main, col_apply, col_action = st.columns([6, 2, 2])
-            with col_main:
-                st.markdown(f"**{row['title']}** @ {row['company']} · `{row['state']}`")
-                st.caption(row["location"] or row["location_bucket"])
-            with col_apply:
-                if row["primary_url"]:
-                    st.link_button("Apply ↗", row["primary_url"])
-            with col_action:
-                if row["state"] == "shortlisted":
-                    if st.button("Mark applied", key=f"applied-{row['id']}"):
-                        tracker.transition(conn, row["id"], "applied")
-                        st.rerun()
-            draft = drafts.existing_draft(conn, row["id"])
-            if draft:
-                st.text_area("Draft (copy from here)", draft, height=320, key=f"draft-{row['id']}")
-                if st.button("Regenerate draft (~$0.002)", key=f"redraft-{row['id']}"):
-                    with st.spinner("Drafting..."):
-                        drafts.generate(conn, row, config.load_resume())
-                    st.rerun()
-            else:
-                if st.button("Draft cover note (~$0.002)", key=f"draft-btn-{row['id']}"):
-                    with st.spinner("Drafting..."):
-                        drafts.generate(conn, row, config.load_resume())
-                    st.rerun()
+        _tracker_card(row)
+
+with tab_funnel:
+    event_rows = tracker.events(conn)
+    flows = sankey.build_flows([(e["from_state"], e["to_state"]) for e in event_rows])
+    counts = tracker.pipeline_counts(conn)
+    rate = tracker.response_rate(conn)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("In pipeline", sum(counts.values()))
+    m2.metric("Applied", counts.get("applied", 0))
+    m3.metric("Response rate", f"{rate:.0%}" if rate is not None else "—")
+    m4.metric("Offers", counts.get("offer", 0))
+
+    fig = sankey.figure(flows)
+    if fig is not None:
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("The funnel draws itself once applications start moving through states.")
+
+    stage_days = tracker.time_in_stage(event_rows)
+    if stage_days:
+        st.subheader("Average days in stage")
+        for state in tracker.STATES:
+            if state in stage_days:
+                st.markdown(f"- **{state}**: {stage_days[state]:.1f} days")
 
 conn.close()
