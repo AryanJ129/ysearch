@@ -33,11 +33,16 @@ def _fmt_salary(job: Job) -> str:
     return f"{lo}–{hi} {job.currency or ''}".strip()
 
 
+def _cell(text: str, width: int) -> str:
+    """Markdown-table-safe cell: literal pipes (e.g. Greenhouse multi-location
+    strings) break columns."""
+    return text[:width].replace("|", "/")
+
+
 def _row(job: Job) -> str:
-    title = job.title[:60].replace("|", "/")
-    company = job.company[:30].replace("|", "/")
     return (
-        f"| {job.source} | {title} | {company} | {job.location or '—'}"
+        f"| {job.source} | {_cell(job.title, 60)} | {_cell(job.company, 30)}"
+        f" | {_cell(job.location or '—', 60)}"
         f" | {_fmt_salary(job)} | {len(job.description)} | {job.url} |"
     )
 
