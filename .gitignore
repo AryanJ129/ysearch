@@ -1,0 +1,26 @@
+# secrets & private config — only *.example.* files are committed
+.env
+config/*
+!config/*.example.*
+
+# data & telemetry
+*.db
+*.db-wal
+*.db-shm
+metrics/
+
+# spike scratch: reveals target queries, salary floor, and target companies — never commit
+spike/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# macOS
+.DS_Store

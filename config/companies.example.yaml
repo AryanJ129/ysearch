@@ -1,0 +1,8 @@
+# ATS watchlist — public job-board JSON endpoints: no API key, no quota.
+# Find a company's slug in its careers-page URL, e.g.
+#   boards.greenhouse.io/<slug>   jobs.lever.co/<slug>   jobs.ashbyhq.com/<slug>
+# Copy to config/companies.yaml (gitignored) and list the companies you watch.
+greenhouse:
+  - anthropic
+lever: []
+ashby: []

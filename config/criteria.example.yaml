@@ -1,0 +1,14 @@
+# Copy to config/criteria.yaml and edit. criteria.yaml is gitignored — it's personal.
+# queries run against JSearch — keep the list small; the free tier is 200 requests/month.
+queries:
+  - "AI product manager"
+  - "forward deployed engineer"
+country: in            # ISO 3166-1 alpha-2 country code for JSearch
+remote_ok: true        # include work-from-home results
+locations:
+  - Chennai
+  - Bangalore
+  - Remote
+salary_floor_lpa: 12   # scoring input only (flags below_floor / salary_unknown) — NEVER a hard filter
+positive_keywords: [LLM, RAG, agents, prompt engineering, automation, MCP, evals]
+negative_keywords: ["10+ years", director]
