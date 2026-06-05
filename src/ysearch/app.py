@@ -283,7 +283,7 @@ with tab_funnel:
 
     fig = sankey.figure(flows)
     if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("The funnel draws itself once applications start moving through states.")
 
