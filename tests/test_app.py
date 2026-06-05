@@ -81,3 +81,51 @@ def test_refresh_button_runs_scan_and_score(tmp_path, monkeypatch):
     conn = store.connect(tmp_path / "ysearch.db")
     assert store.get_meta(conn, "last_scan_at") is not None
     conn.close()
+
+
+def test_hide_stale_filter_and_age_badges(tmp_path, monkeypatch):
+    """Ghost shield in the UI: ages render, the checkbox defaults OFF (flag,
+    don't hide silently), and checking it hides only known->30d postings —
+    unknown-age jobs always stay visible."""
+    import datetime
+
+    monkeypatch.chdir(tmp_path)
+    from ysearch import store
+    from ysearch.models import Job
+
+    today = datetime.datetime.now(datetime.timezone.utc)
+    fresh = (today - datetime.timedelta(days=3)).strftime("%Y-%m-%d")
+    stale = (today - datetime.timedelta(days=60)).strftime("%Y-%m-%d")
+    conn = store.connect(tmp_path / "ysearch.db")
+    store.init_db(conn)
+    specs = [
+        ("Fresh Role", fresh),
+        ("Stale Role", stale),
+        ("Undated Role", None),
+    ]
+    for title, posted in specs:
+        job_id, _ = store.upsert_job(
+            conn,
+            Job(source="jsearch", title=title, company="Acme", posted_at=posted),
+            bucket="remote-india",
+            key=f"acme|{title.lower().replace(' ', '-')}|remote-india",
+        )
+        store.insert_score(conn, job_id, score=80, fit_reasons=[], flags=[], model="m", cost_usd=0)
+    conn.commit()
+    conn.close()
+
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.run()
+    assert not at.exception
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    captions = " ".join(str(c.value) for c in at.caption)
+    assert "Fresh Role" in rendered and "Stale Role" in rendered and "Undated Role" in rendered
+    assert "posted 3d ago" in captions and "posted 60d ago" in captions
+
+    stale_box = next(c for c in at.checkbox if c.label.startswith("Hide stale"))
+    assert stale_box.value is False  # default OFF — flag, don't hide silently
+    stale_box.check().run()
+    assert not at.exception
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    assert "Stale Role" not in rendered
+    assert "Fresh Role" in rendered and "Undated Role" in rendered

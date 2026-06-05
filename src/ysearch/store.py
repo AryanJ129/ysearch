@@ -7,6 +7,7 @@ that pattern. Connections are short-lived and per-operation.
 
 from __future__ import annotations
 
+import datetime
 import json
 import sqlite3
 from pathlib import Path
@@ -29,6 +30,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     source_urls TEXT NOT NULL DEFAULT '[]',
     primary_url TEXT,
     posted_at TEXT,
+    repost_count INTEGER NOT NULL DEFAULT 0,
     description TEXT DEFAULT '',
     raw_json TEXT,
     first_seen TEXT NOT NULL DEFAULT (datetime('now'))
@@ -109,8 +111,17 @@ def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
     return conn
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Column adds for dbs created before a column existed — CREATE TABLE IF
+    NOT EXISTS never alters an existing table, so new columns need ALTERs."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+    if "repost_count" not in cols:
+        conn.execute("ALTER TABLE jobs ADD COLUMN repost_count INTEGER NOT NULL DEFAULT 0")
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    _migrate(conn)
     conn.commit()
 
 
@@ -125,6 +136,35 @@ def _url_rank(url: str) -> int:
 
 def choose_primary(urls: list[str]) -> str | None:
     return min(urls, key=_url_rank) if urls else None
+
+
+# A re-listing this much newer than the stored posting date counts as a
+# repost (taken down and re-posted) rather than source clock skew.
+REPOST_THRESHOLD_DAYS = 14
+
+
+def _parse_iso(value: str) -> datetime.datetime | None:
+    """Defensive ISO-8601 parse; naive timestamps are assumed UTC."""
+    try:
+        parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
+
+
+def _days_newer(stored_iso: str, incoming_iso: str) -> float | None:
+    """How many days NEWER the incoming posted_at is vs the stored one.
+
+    None when either date fails to parse — bad source dates must never crash
+    a scan or fake a repost.
+    """
+    stored = _parse_iso(stored_iso)
+    incoming = _parse_iso(incoming_iso)
+    if stored is None or incoming is None:
+        return None
+    return (incoming - stored).total_seconds() / 86400
 
 
 def upsert_job(
@@ -175,8 +215,17 @@ def upsert_job(
     )
     posted_candidates = [p for p in (row["posted_at"], job.posted_at) if p]
     posted_at = min(posted_candidates) if posted_candidates else None
+    # Ghost-job signal: the same job re-listed with a materially newer posting
+    # date means it was taken down and re-posted. Keep the EARLIEST posted_at
+    # (true age) but count the repost.
+    repost_bump = 0
+    if row["posted_at"] and job.posted_at:
+        newer_days = _days_newer(row["posted_at"], job.posted_at)
+        if newer_days is not None and newer_days > REPOST_THRESHOLD_DAYS:
+            repost_bump = 1
     conn.execute(
         """UPDATE jobs SET source_urls = ?, primary_url = ?, description = ?, posted_at = ?,
+              repost_count = repost_count + ?,
               salary_min = COALESCE(salary_min, ?), salary_max = COALESCE(salary_max, ?),
               currency = COALESCE(currency, ?)
            WHERE id = ?""",
@@ -185,6 +234,7 @@ def upsert_job(
             choose_primary(url_list),
             description,
             posted_at,
+            repost_bump,
             job.salary_min,
             job.salary_max,
             job.currency,

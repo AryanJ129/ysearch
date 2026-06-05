@@ -7,9 +7,30 @@ with different URLs.
 
 from __future__ import annotations
 
+import datetime
 import re
 
 from ysearch.models import Job
+
+
+def posting_age_days(posted_at_iso: str | None, *, now: datetime.datetime) -> int | None:
+    """Days since the posting date — the ghost-job staleness signal.
+
+    `now` is passed in (not read from the clock) for testability. Returns
+    None on missing/unparseable dates: age is a display/filter signal and a
+    bad source date must never crash rendering. Future-dated postings clamp
+    to 0 (source clock skew, not negative age).
+    """
+    if not posted_at_iso:
+        return None
+    try:
+        posted = datetime.datetime.fromisoformat(posted_at_iso.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if posted.tzinfo is None:
+        posted = posted.replace(tzinfo=datetime.timezone.utc)
+    return max(0, (now - posted).days)
+
 
 _CITY_ALIASES = {
     "bangalore": "bengaluru",

@@ -111,6 +111,19 @@ ysearch ui                      # browse
 | `location_mismatch` | Not in your locations and not remote-eligible for you |
 | `needs_review` | The scorer hedged — read this one yourself |
 
+## Ghost-job shields
+
+Studies put ghost jobs (postings nobody intends to fill) at 20–27% of all
+listings. ysearch surfaces the two deterministic tells on every job:
+
+- **`posted Nd ago`** — postings older than ~30 days are widely treated as
+  likely ghost. The sidebar's **Hide stale (>30 days)** checkbox filters them
+  out when you want a clean view — it's off by default, so nothing is ever
+  hidden silently. Jobs with no posting date are never treated as stale.
+- **`reposted ×N`** — the same job taken down and re-listed with a much newer
+  date (a classic ghost/evergreen pattern). ysearch keeps the *original*
+  posting date and counts each re-list.
+
 ## Privacy & cost guardrails
 
 - Local-first: no server, no telemetry, no shared data. Each user runs their

@@ -8,11 +8,17 @@ are the one exception — each press is one Haiku call, ~$0.002).
 
 from __future__ import annotations
 
+import datetime
 import json
 
 import streamlit as st
 
-from ysearch import config, drafts, sankey, store, tracker
+from ysearch import config, drafts, normalize, sankey, store, tracker
+
+# Postings older than this are widely treated as likely-ghost (see README).
+STALE_DAYS = 30
+# One clock read per rerun — every age in a pass is consistent.
+_NOW = datetime.datetime.now(datetime.timezone.utc)
 
 st.set_page_config(page_title="ysearch", page_icon="🔭", layout="wide")
 config.load_env()
@@ -74,13 +80,23 @@ def _reasons(row) -> list[str]:
     return json.loads(row["fit_reasons"] or "[]")
 
 
+def _age_days(row) -> int | None:
+    return normalize.posting_age_days(row["posted_at"], now=_NOW)
+
+
 def _job_header(row, state: str | None) -> None:
     state_badge = f" · `{state}`" if state and state != "discovered" else ""
     st.markdown(f"**{row['score']}/100 — {row['title']}** @ {row['company']}{state_badge}")
+    bits = [row["location"] or row["location_bucket"]]
+    age = _age_days(row)
+    if age is not None:
+        bits.append(f"posted {age}d ago")
+    if row["repost_count"]:
+        bits.append(f"reposted ×{row['repost_count']}")
     flag_text = " · ".join(_flags(row))
-    st.caption(
-        f"{row['location'] or row['location_bucket']}" + (f" · {flag_text}" if flag_text else "")
-    )
+    if flag_text:
+        bits.append(flag_text)
+    st.caption(" · ".join(bits))
 
 
 def _details(row) -> None:
@@ -171,6 +187,9 @@ with st.sidebar:
     ]
     buckets = st.multiselect("Location buckets", all_buckets, default=[])
     st.caption("Empty bucket filter = all locations.")
+    # Ghost-job shield: >30-day-old postings are widely treated as likely
+    # ghost. Default OFF — flag, don't hide silently.
+    hide_stale = st.checkbox(f"Hide stale (>{STALE_DAYS} days)", value=False)
 
 tab_inbox, tab_tracker, tab_funnel, tab_settings, tab_help = st.tabs(
     ["Inbox", "Tracker", "Funnel", "Settings", "Help"]
@@ -181,7 +200,10 @@ with tab_inbox:
     filtered = [
         r
         for r in rows
-        if r["score"] >= min_score and (not buckets or r["location_bucket"] in buckets)
+        if r["score"] >= min_score
+        and (not buckets or r["location_bucket"] in buckets)
+        # Unknown age is NOT stale — only a known >30d age hides a job.
+        and (not hide_stale or (_age_days(r) or 0) <= STALE_DAYS)
     ]
     st.caption(f"{len(filtered)} of {len(rows)} scored jobs (showing top 100)")
     for row in filtered[:100]:

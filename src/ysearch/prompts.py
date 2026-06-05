@@ -8,6 +8,10 @@ needs_review, never a crash, never trust.
 
 from __future__ import annotations
 
+import datetime
+
+from ysearch import normalize
+
 MAX_POSTING_CHARS = 6000
 
 ALLOWED_FLAGS = (
@@ -116,15 +120,21 @@ def build_draft_user_prompt(resume_text: str, posting_text: str) -> str:
     return f"Owner resume:\n{resume_text}\n\n<posting>\n{posting}\n</posting>"
 
 
-def render_posting(row) -> str:
+def render_posting(row, *, now: datetime.datetime | None = None) -> str:
     """Render a jobs-table row as posting text for prompts."""
     salary = (
         f"{row['salary_min']}–{row['salary_max']} {row['currency'] or ''}"
         if row["salary_min"] is not None or row["salary_max"] is not None
         else "not stated"
     )
+    # Age context for the model (staleness itself stays deterministic: it is
+    # displayed and filterable in the UI, never a model-judged flag).
+    age = normalize.posting_age_days(
+        row["posted_at"], now=now or datetime.datetime.now(datetime.timezone.utc)
+    )
+    posted = f"Posted: {age} days ago\n" if age is not None else ""
     return (
         f"Title: {row['title']}\nCompany: {row['company']}\n"
         f"Location: {row['location'] or 'unknown'} (bucket: {row['location_bucket']})\n"
-        f"Salary: {salary}\n\n{row['description'] or ''}"
+        f"Salary: {salary}\n{posted}\n{row['description'] or ''}"
     )

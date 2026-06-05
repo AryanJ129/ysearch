@@ -51,6 +51,7 @@ def test_render_posting_handles_missing_salary():
         "salary_min": None,
         "salary_max": None,
         "currency": None,
+        "posted_at": None,  # column exists on every jobs row since ghost shields
         "description": "Build things.",
     }
     text = prompts.render_posting(row)
