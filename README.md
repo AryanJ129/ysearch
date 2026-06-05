@@ -17,20 +17,41 @@ your database stay local and are never committed to git.
 
 ## Quickstart (fresh machine)
 
-1. Install [uv](https://docs.astral.sh/uv/) if you don't have it.
-2. ```bash
-   git clone https://github.com/AryanJ129/ysearch.git && cd ysearch
-   uv sync
-   uv run ysearch ui
+One line — installs [uv](https://docs.astral.sh/uv/) if needed, then ysearch:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AryanJ129/ysearch/main/install.sh | sh
+```
+
+(Already have uv? `uv tool install ysearch` — or run without installing:
+`uvx ysearch ui`.)
+
+Then:
+
+1. ```bash
+   ysearch ui
    ```
-3. In the app, open **Settings** and add your two keys (next section).
-4. Open **Settings → Criteria**, describe what you're looking for, click
+2. In the app, open **Settings** and add your two keys (next section).
+3. Open **Settings → Criteria**, describe what you're looking for, click
    **Generate criteria with AI**, review, save. Paste your resume too.
-5. Back in a terminal:
+4. Back in a terminal:
    ```bash
-   uv run ysearch scan && uv run ysearch score
+   ysearch scan && ysearch score
    ```
-6. Refresh the app — your scored inbox is ready.
+5. Refresh the app — your scored inbox is ready.
+
+**Where your data lives:** installed this way, everything (keys, criteria,
+resume, database) goes in `~/.ysearch/` — set `YSEARCH_HOME` to move it. If
+you run from a cloned repo instead, the clone's folder is used, exactly as
+before.
+
+### Developer setup (clone)
+
+```bash
+git clone https://github.com/AryanJ129/ysearch.git && cd ysearch
+uv sync
+uv run ysearch ui   # data stays in the clone: ./config, ./ysearch.db, ./.env
+```
 
 ## Get your keys (both have free tiers)
 
@@ -65,9 +86,11 @@ mapping to the real email format.
 ## Daily use
 
 ```bash
-uv run ysearch scan && uv run ysearch score   # ~4 quota requests + a few cents
-uv run ysearch ui                             # browse
+ysearch scan && ysearch score   # ~4 quota requests + a few cents
+ysearch ui                      # browse
 ```
+
+(In a cloned repo, prefix with `uv run`.)
 
 - **Inbox** — scored jobs, best first. Filter by minimum score and location.
   *Shortlist* what looks good; *Apply ↗* opens the real posting.
@@ -76,8 +99,7 @@ uv run ysearch ui                             # browse
   notes, and move the application through states as things happen.
 - **Funnel** — your pipeline as a Sankey diagram, plus response rate and
   time-in-stage.
-- `uv run ysearch digest` prints the top 10 as markdown if you prefer a
-  terminal.
+- `ysearch digest` prints the top 10 as markdown if you prefer a terminal.
 
 ## What the flags mean
 
