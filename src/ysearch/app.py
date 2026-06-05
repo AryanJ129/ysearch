@@ -93,7 +93,7 @@ def _job_header(row, state: str | None) -> None:
         bits.append(f"posted {age}d ago")
     if row["repost_count"]:
         bits.append(f"reposted ×{row['repost_count']}")
-    flag_text = " · ".join(_flags(row))
+    flag_text = " · ".join("⚠️ scam_risk" if f == "scam_risk" else f for f in _flags(row))
     if flag_text:
         bits.append(flag_text)
     st.caption(" · ".join(bits))

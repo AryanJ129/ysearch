@@ -110,6 +110,7 @@ ysearch ui                      # browse
 | `seniority_mismatch` | Requires materially more experience than you have — score capped at 60 |
 | `location_mismatch` | Not in your locations and not remote-eligible for you |
 | `needs_review` | The scorer hedged — read this one yourself |
+| `scam_risk` ⚠️ | Fee requests, WhatsApp-only contact, unreal salary, unverifiable company — score capped at 20. Fee-asking phrases are also caught deterministically in code, independent of the AI |
 
 ## Ghost-job shields
 

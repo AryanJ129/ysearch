@@ -20,6 +20,7 @@ ALLOWED_FLAGS = (
     "seniority_mismatch",
     "location_mismatch",
     "needs_review",
+    "scam_risk",
 )
 
 SCORE_SYSTEM = """You score job postings for fit against the owner's criteria.
@@ -40,10 +41,17 @@ owner has (roughly 2x, or 3+ years above), add the "seniority_mismatch" flag
 and score the job 60 or below — a great role the owner cannot pass screening
 for is not a great match.
 
+Scams: job scams are rampant, especially fee-asking ones. Add the "scam_risk"
+flag if the posting shows any of: requests for money from the candidate
+(registration/joining/processing fees, "refundable" charges or deposits),
+contact ONLY via WhatsApp/Telegram/personal numbers, salary wildly above
+market for the experience asked, no verifiable company identity, or heavy
+spelling/grammar errors throughout. A scam is not a job — flag it.
+
 Reply with ONLY a JSON object, no prose:
 {"score": <integer 0-100>,
  "fit_reasons": [<up to 4 short strings>],
- "flags": [<zero or more of: below_floor, salary_unknown, seniority_mismatch, location_mismatch, needs_review>]}
+ "flags": [<zero or more of: below_floor, salary_unknown, seniority_mismatch, location_mismatch, needs_review, scam_risk>]}
 """
 
 # Verbatim delimiter between the sendable note and the owner-only coaching.

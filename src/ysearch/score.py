@@ -11,7 +11,7 @@ import json
 
 import httpx
 
-from ysearch import llm, prompts, store
+from ysearch import llm, prompts, signals, store
 from ysearch.config import Criteria
 
 DAILY_CAP = 100
@@ -48,8 +48,14 @@ def apply_policy(score: int | None, flags: list[str]) -> int | None:
     seniority_mismatch caps the score at 60 in CODE, not just in the prompt —
     a posting requiring far more experience must never top the inbox even if
     the model scores it high (the bug that put a 5-years-required role at 92
-    for a 1.5-year owner)."""
-    if score is not None and "seniority_mismatch" in flags:
+    for a 1.5-year owner).
+
+    scam_risk caps harder, at 20: a scam is not a worse job, it's not a job."""
+    if score is None:
+        return None
+    if "scam_risk" in flags:
+        return min(score, 20)
+    if "seniority_mismatch" in flags:
         return min(score, 60)
     return score
 
@@ -85,6 +91,10 @@ def score_unscored(
             failed += 1
             continue
         score, reasons, flags = parse_reply(text)
+        # Deterministic net: unambiguous fee-asking phrases in the posting set
+        # scam_risk in CODE — the model can't miss what the regex catches.
+        if signals.has_scam_signals(row["description"]) and "scam_risk" not in flags:
+            flags.append("scam_risk")
         score = apply_policy(score, flags)
         store.insert_score(
             conn,
