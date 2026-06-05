@@ -73,6 +73,26 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- Email status sync (statussync.py). Suggestions NEVER move state by
+-- themselves — the owner resolves each one in the Tracker tab.
+CREATE TABLE IF NOT EXISTS processed_emails (
+    message_id TEXT PRIMARY KEY,
+    processed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS status_suggestions (
+    id INTEGER PRIMARY KEY,
+    application_id INTEGER REFERENCES applications(id),  -- NULL = unmatched email
+    suggested_state TEXT,
+    kind TEXT NOT NULL,
+    company_guess TEXT,
+    email_subject TEXT,
+    email_date TEXT,
+    confidence REAL,
+    resolution TEXT NOT NULL DEFAULT 'pending',  -- pending | accepted | dismissed
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 # primary_url preference: direct ATS link > company page > aggregator chain.

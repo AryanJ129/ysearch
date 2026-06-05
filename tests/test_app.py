@@ -129,3 +129,51 @@ def test_hide_stale_filter_and_age_badges(tmp_path, monkeypatch):
     rendered = " ".join(str(m.value) for m in at.markdown)
     assert "Stale Role" not in rendered
     assert "Fresh Role" in rendered and "Undated Role" in rendered
+
+
+def test_status_suggestion_panel_renders_and_applies(tmp_path, monkeypatch):
+    """A pending email suggestion renders in the Tracker tab; clicking Apply
+    moves the application through tracker.transition."""
+    monkeypatch.chdir(tmp_path)
+    from ysearch import store, tracker
+    from ysearch.models import Job
+
+    conn = store.connect(tmp_path / "ysearch.db")
+    store.init_db(conn)
+    job_id, _ = store.upsert_job(
+        conn,
+        Job(source="jsearch", title="AI PM", company="Acme Analytics"),
+        bucket="remote-india",
+        key="acme|ai-pm|remote-india",
+    )
+    tracker.transition(conn, job_id, "applied")
+    app_row = tracker.application_for_job(conn, job_id)
+    conn.execute(
+        """INSERT INTO status_suggestions
+             (application_id, suggested_state, kind, email_subject, email_date, confidence)
+           VALUES (?, 'rejected', 'rejection', 'Update on your application', '2026-06-04', 0.95)""",
+        (app_row["id"],),
+    )
+    conn.commit()
+    conn.close()
+
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.run()
+    assert not at.exception
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    assert "Suggestions from status emails" in " ".join(str(h.value) for h in at.subheader)
+    assert "Update on your application" in rendered
+    assert "rejection" in rendered
+
+    sugg_id = 1  # the only suggestion
+    at.button(key=f"sugg-apply-{sugg_id}").click().run()
+    assert not at.exception
+    conn = store.connect(tmp_path / "ysearch.db")
+    assert tracker.application_for_job(conn, job_id)["state"] == "rejected"
+    assert (
+        conn.execute(
+            "SELECT resolution FROM status_suggestions WHERE id = ?", (sugg_id,)
+        ).fetchone()[0]
+        == "accepted"
+    )
+    conn.close()

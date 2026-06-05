@@ -226,6 +226,43 @@ with tab_inbox:
             _details(row)
 
 with tab_tracker:
+    from ysearch import statussync
+
+    pending_suggestions = statussync.pending_suggestions(conn)
+    if pending_suggestions:
+        st.subheader("Suggestions from status emails")
+        st.caption(
+            "Emails propose — you decide. Apply moves the application (and pins the"
+            " email as a note); Dismiss just hides the suggestion."
+        )
+        for sugg in pending_suggestions:
+            with st.container(border=True):
+                col_text, col_actions = st.columns([7, 2])
+                kind_label = sugg["kind"].replace("_", " ")
+                with col_text:
+                    if sugg["application_id"] is not None:
+                        st.markdown(
+                            f"**{sugg['company']}** — {kind_label} ·"
+                            f' "{sugg["email_subject"]}" ({sugg["email_date"] or "undated"})'
+                            f" → `{sugg['current_state']}` → `{sugg['suggested_state']}`"
+                        )
+                    else:
+                        st.markdown(
+                            f"**{sugg['company_guess'] or 'Unknown company'}** — {kind_label} ·"
+                            f' "{sugg["email_subject"]}" ({sugg["email_date"] or "undated"})'
+                            " · no matching application"
+                        )
+                with col_actions:
+                    if sugg["application_id"] is not None and st.button(
+                        "Apply", key=f"sugg-apply-{sugg['id']}"
+                    ):
+                        statussync.apply_suggestion(conn, sugg["id"])
+                        st.rerun()
+                    if st.button("Dismiss", key=f"sugg-dismiss-{sugg['id']}"):
+                        statussync.dismiss_suggestion(conn, sugg["id"])
+                        st.rerun()
+        st.divider()
+
     apps = tracker.applications_with_jobs(conn)
     if not apps:
         st.info("No applications yet — hit Shortlist on an Inbox job.")
@@ -312,6 +349,7 @@ with tab_settings:
         "jsearch": "JSearch (Google for Jobs — quota: 200 req/month free)",
         "ats": "ATS boards (Greenhouse / Lever / Ashby — free, no quota)",
         "naukri": "Naukri alert emails (set up in the section below)",
+        "statussync": "Status emails → tracker suggestions (set up in the section below)",
     }
     for source, label in source_labels.items():
         toggled = st.toggle(label, value=sources_now[source], key=f"src-{source}")
@@ -341,12 +379,22 @@ with tab_settings:
     )
     from ysearch.sources import email_naukri
 
+    from ysearch import statussync
+
     imap_user, imap_password, imap_label = email_naukri.imap_settings()
     col_user, col_label = st.columns(2)
     with col_user:
         new_imap_user = st.text_input("Gmail address", value=imap_user or "", key="imap-user")
     with col_label:
         new_imap_label = st.text_input("IMAP label to watch", value=imap_label, key="imap-label")
+    new_status_label = st.text_input(
+        "Status-email label (rejections / interview invites / offers)",
+        value=statussync.status_label(),
+        key="imap-status-label",
+        help="Filter ATS and recruiter mail (greenhouse.io, lever.co, ashbyhq.com, "
+        '"no-reply" application updates) into this label — each new email becomes '
+        "a suggestion in the Tracker tab. Suggestions never move state by themselves.",
+    )
     new_imap_password = st.text_input(
         "Gmail app password",
         type="password",
@@ -362,6 +410,7 @@ with tab_settings:
                     "YSEARCH_IMAP_USER": new_imap_user,
                     "YSEARCH_IMAP_PASSWORD": new_imap_password,
                     "YSEARCH_IMAP_LABEL": new_imap_label,
+                    "YSEARCH_IMAP_STATUS_LABEL": new_status_label,
                 }
             )
             st.success("Saved to .env — active now.")

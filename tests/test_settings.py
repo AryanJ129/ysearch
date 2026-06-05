@@ -94,7 +94,13 @@ def test_source_toggles_default_on_and_persist(tmp_path):
 
     conn = store.connect(tmp_path / "t.db")
     store.init_db(conn)
-    assert scan.enabled_sources(conn) == {"jsearch": True, "ats": True, "naukri": True}
+    # v2 contract: statussync joined the toggle set (email status sync).
+    assert scan.enabled_sources(conn) == {
+        "jsearch": True,
+        "ats": True,
+        "naukri": True,
+        "statussync": True,
+    }
     scan.set_source_enabled(conn, "jsearch", False)
     assert scan.enabled_sources(conn)["jsearch"] is False
     scan.set_source_enabled(conn, "jsearch", True)

@@ -17,7 +17,7 @@ import httpx
 
 import imaplib
 
-from ysearch import config, normalize, store
+from ysearch import config, normalize, statussync, store
 from ysearch.config import Criteria, QuerySpec
 from ysearch.sources import ats, email_naukri, jsearch
 
@@ -33,7 +33,7 @@ _ATS_FETCHERS = {
 }
 
 
-SOURCE_TOGGLES = ("jsearch", "ats", "naukri")
+SOURCE_TOGGLES = ("jsearch", "ats", "naukri", "statussync")
 
 
 def enabled_sources(conn) -> dict[str, bool]:
@@ -140,6 +140,21 @@ def run() -> int:
             print("[--] Naukri email: IMAP credentials not set (Settings → Naukri) — skipping.")
     else:
         print("[--] Naukri email disabled in Settings — skipping.")
+
+    if sources["statussync"]:
+        if email_naukri.have_creds():
+            try:
+                sync = statussync.run(conn)
+                print(
+                    f"  [ok] status emails: {sync['new_emails']} new,"
+                    f" {sync['suggestions']} suggestions (review in Tracker)"
+                )
+            except (imaplib.IMAP4.error, OSError) as exc:
+                print(f"  [!!] status emails: {exc}")
+        else:
+            print("[--] Status emails: IMAP credentials not set (Settings → Naukri) — skipping.")
+    else:
+        print("[--] Status email sync disabled in Settings — skipping.")
 
     store.set_meta(
         conn,

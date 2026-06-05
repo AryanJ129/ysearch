@@ -83,6 +83,27 @@ Once a real alert email has landed, run `ysearch scan` and eyeball the parsed
 rows — the parser ships against a synthetic fixture and may need a one-time
 mapping to the real email format.
 
+## Optional: status emails → tracker suggestions
+
+The #1 complaint about every job tracker is manual upkeep. ysearch reads your
+application status emails (rejections, interview invites, offers) and turns
+each one into a **suggestion** in the Tracker tab — you click Apply or
+Dismiss. **Emails never move an application by themselves**; your funnel
+stays a record of your decisions.
+
+1. In Gmail, create a second label (default `ysearch-status`) and filter your
+   ATS/recruiter mail into it — senders like `greenhouse.io`, `lever.co`,
+   `ashbyhq.com`, `myworkdayjobs.com`, plus "no-reply" application updates.
+2. Same Gmail address + app password as the Naukri section; set the label in
+   **Settings → Naukri / Email alerts**.
+3. Every `ysearch scan` checks the label. Each NEW email gets one cheap AI
+   classification (~$0.001), is matched to your open applications by company,
+   and lands at the top of the **Tracker** tab. Emails about companies you
+   have no application with are shown as "no matching application" — visible,
+   never silently dropped.
+4. Apply moves the application (and pins the email subject/date as a note);
+   Dismiss hides the suggestion. Already-processed emails are never re-billed.
+
 ## Daily use
 
 ```bash
