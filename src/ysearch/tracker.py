@@ -89,6 +89,66 @@ def response_rate(conn: sqlite3.Connection) -> float | None:
     return len(applied & responded) / len(applied)
 
 
+def response_by_source(conn: sqlite3.Connection) -> list[dict]:
+    """Response rate split by where the job came from (jobs.source) — the
+    closed-loop question: which channel actually converts? Same doctrine as
+    response_rate: rejection is a response, ghosting isn't. Returns raw
+    counts, not just rates — small numbers should be read as fractions."""
+    applied = {
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT application_id FROM state_events WHERE to_state = 'applied'"
+        )
+    }
+    responded = {
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT application_id FROM state_events"
+            " WHERE to_state IN ('screen', 'interview', 'offer', 'rejected')"
+        )
+    }
+    source_of = dict(
+        conn.execute("SELECT a.id, j.source FROM applications a JOIN jobs j ON j.id = a.job_id")
+    )
+    out: dict[str, dict] = {}
+    for app_id in applied:
+        source = source_of.get(app_id) or "unknown"
+        row = out.setdefault(source, {"source": source, "applied": 0, "responded": 0})
+        row["applied"] += 1
+        if app_id in responded:
+            row["responded"] += 1
+    return sorted(out.values(), key=lambda r: (-r["applied"], r["source"]))
+
+
+def median_days_to_response(conn: sqlite3.Connection) -> float | None:
+    """Median days from `applied` to the first human response. None until
+    at least one application has both ends of the interval."""
+    applied_at = dict(
+        conn.execute(
+            "SELECT application_id, MIN(at) FROM state_events"
+            " WHERE to_state = 'applied' GROUP BY application_id"
+        )
+    )
+    first_response = dict(
+        conn.execute(
+            "SELECT application_id, MIN(at) FROM state_events"
+            " WHERE to_state IN ('screen', 'interview', 'offer', 'rejected')"
+            " GROUP BY application_id"
+        )
+    )
+    spans = []
+    for app_id, start in applied_at.items():
+        end = first_response.get(app_id)
+        if end and end > start:
+            delta = datetime.datetime.fromisoformat(end) - datetime.datetime.fromisoformat(start)
+            spans.append(delta.total_seconds() / 86400)
+    if not spans:
+        return None
+    spans.sort()
+    mid = len(spans) // 2
+    return spans[mid] if len(spans) % 2 else (spans[mid - 1] + spans[mid]) / 2
+
+
 def time_in_stage(event_rows: list) -> dict[str, float]:
     """Average days spent in each state, from consecutive event timestamps
     per application. Open-ended (current) stages are not counted."""

@@ -253,12 +253,14 @@ def apply_suggestion(conn: sqlite3.Connection, suggestion_id: int) -> None:
     if sugg is None:  # unmatched, already resolved, or unknown — nothing to move
         return
     tracker.transition(conn, sugg["job_id"], sugg["suggested_state"])
-    store.add_note(
-        conn,
-        sugg["job_id"],
-        f'Status email ({sugg["email_date"] or "undated"}): "{sugg["email_subject"]}"'
-        f" → {sugg['suggested_state']}",
-    )
+    if sugg["source"] == "stalled":  # nudges.py auto-ghost — no email behind it
+        note = f"No response — {sugg['email_subject']} → marked {sugg['suggested_state']}"
+    else:
+        note = (
+            f'Status email ({sugg["email_date"] or "undated"}): "{sugg["email_subject"]}"'
+            f" → {sugg['suggested_state']}"
+        )
+    store.add_note(conn, sugg["job_id"], note)
     conn.execute(
         "UPDATE status_suggestions SET resolution = 'accepted' WHERE id = ?", (suggestion_id,)
     )

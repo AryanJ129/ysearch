@@ -13,7 +13,7 @@ import json
 
 import streamlit as st
 
-from ysearch import config, drafts, normalize, sankey, store, tracker
+from ysearch import config, drafts, normalize, nudges, sankey, store, tracker
 
 # Postings older than this are widely treated as likely-ghost (see README).
 STALE_DAYS = 30
@@ -240,7 +240,12 @@ with tab_tracker:
                 col_text, col_actions = st.columns([7, 2])
                 kind_label = sugg["kind"].replace("_", " ")
                 with col_text:
-                    if sugg["application_id"] is not None:
+                    if sugg["source"] == "stalled":  # deterministic auto-ghost, no email
+                        st.markdown(
+                            f"**{sugg['company']}** — {kind_label} · {sugg['email_subject']}"
+                            f" → `{sugg['current_state']}` → `{sugg['suggested_state']}`"
+                        )
+                    elif sugg["application_id"] is not None:
                         st.markdown(
                             f"**{sugg['company']}** — {kind_label} ·"
                             f' "{sugg["email_subject"]}" ({sugg["email_date"] or "undated"})'
@@ -261,6 +266,34 @@ with tab_tracker:
                     if st.button("Dismiss", key=f"sugg-dismiss-{sugg['id']}"):
                         statussync.dismiss_suggestion(conn, sugg["id"])
                         st.rerun()
+        st.divider()
+
+    nudge_rows = nudges.pending_nudges(conn)
+    if nudge_rows:
+        st.subheader("Nudges")
+        st.caption(
+            "Nothing has moved for a while. Log a follow-up (saved as a note, resets"
+            " the clock) or move the state on the card below."
+        )
+        for nudge in nudge_rows:
+            col_text, col_act = st.columns([7, 2])
+            with col_text:
+                if nudge["kind"] == "follow_up":
+                    st.markdown(
+                        f"**{nudge['company']}** — {nudge['title']} · in `{nudge['state']}`"
+                        f" {nudge['days']}d with no response — time to follow up?"
+                    )
+                else:  # apply_or_drop
+                    st.markdown(
+                        f"**{nudge['company']}** — {nudge['title']} · shortlisted"
+                        f" {nudge['days']}d ago and not applied — apply or drop?"
+                    )
+            with col_act:
+                if nudge["kind"] == "follow_up" and st.button(
+                    "Log follow-up", key=f"nudge-fu-{nudge['application_id']}"
+                ):
+                    nudges.log_follow_up(conn, nudge["job_id"])
+                    st.rerun()
         st.divider()
 
     apps = tracker.applications_with_jobs(conn)
@@ -293,6 +326,22 @@ with tab_funnel:
         for state in tracker.STATES:
             if state in stage_days:
                 st.markdown(f"- **{state}**: {stage_days[state]:.1f} days")
+
+    by_source = tracker.response_by_source(conn)
+    if by_source:
+        st.subheader("What's working")
+        st.caption(
+            "Responses by where the job came from (a rejection IS a response;"
+            " ghosting isn't). Small numbers — read the fractions, not percentages."
+        )
+        for row in by_source:
+            share = f" ({row['responded'] / row['applied']:.0%})" if row["applied"] >= 3 else ""
+            st.markdown(
+                f"- **{row['source']}**: {row['responded']}/{row['applied']} responded{share}"
+            )
+        median_days = tracker.median_days_to_response(conn)
+        if median_days is not None:
+            st.markdown(f"- **Median days to first response**: {median_days:.0f}")
 
 with tab_settings:
     import os

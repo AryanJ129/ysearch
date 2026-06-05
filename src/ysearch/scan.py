@@ -17,7 +17,7 @@ import httpx
 
 import imaplib
 
-from ysearch import config, normalize, statussync, store
+from ysearch import config, normalize, nudges, statussync, store
 from ysearch.config import Criteria, QuerySpec
 from ysearch.sources import ats, email_naukri, jsearch
 
@@ -155,6 +155,14 @@ def run() -> int:
             print("[--] Status emails: IMAP credentials not set (Settings → Naukri) — skipping.")
     else:
         print("[--] Status email sync disabled in Settings — skipping.")
+
+    # Local + free + deterministic — runs every scan, no toggle, no creds.
+    ghost_count = nudges.generate_stall_suggestions(conn)
+    if ghost_count:
+        print(
+            f"  [ok] stall check: {ghost_count} application(s) silent"
+            f" >{nudges.GHOST_AFTER_DAYS}d — ghost suggestion(s) in Tracker"
+        )
 
     store.set_meta(
         conn,

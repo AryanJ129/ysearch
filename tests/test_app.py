@@ -131,6 +131,60 @@ def test_hide_stale_filter_and_age_badges(tmp_path, monkeypatch):
     assert "Fresh Role" in rendered and "Undated Role" in rendered
 
 
+def test_nudges_and_response_intel_render(tmp_path, monkeypatch):
+    """A stalled application shows a follow-up nudge in Tracker (Log follow-up
+    resets it) and the Funnel shows the by-source response breakdown."""
+    import datetime
+
+    monkeypatch.chdir(tmp_path)
+    from ysearch import store, tracker
+
+    conn = store.connect(tmp_path / "ysearch.db")
+    store.init_db(conn)
+    from ysearch.models import Job
+
+    job_id, _ = store.upsert_job(
+        conn,
+        Job(source="jsearch", title="AI PM", company="Acme"),
+        bucket="b",
+        key="acme|ai-pm|b",
+    )
+    app = tracker.get_or_create(conn, job_id)
+    conn.execute("DELETE FROM state_events WHERE application_id = ?", (app["id"],))
+    stamp = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=16)).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+    conn.execute(
+        "INSERT INTO state_events (application_id, from_state, to_state, at) VALUES (?, NULL, 'applied', ?)",
+        (app["id"], stamp),
+    )
+    conn.execute("UPDATE applications SET state = 'applied' WHERE id = ?", (app["id"],))
+    conn.commit()
+    conn.close()
+
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.run()
+    assert not at.exception
+    subheaders = " ".join(str(h.value) for h in at.subheader)
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    assert "Nudges" in subheaders
+    assert "16d with no response" in rendered
+    assert "What's working" in subheaders
+    assert "jsearch" in rendered and "0/1 responded" in rendered
+
+    at.button(key=f"nudge-fu-{app['id']}").click().run()
+    assert not at.exception
+    conn = store.connect(tmp_path / "ysearch.db")
+    notes = [n["body_md"] for n in store.notes_for_job(conn, job_id)]
+    assert any(n.startswith("Followed up") for n in notes)
+    conn.close()
+    # The nudge is gone on the NEXT run (AppTest's element list reflects the
+    # run where the click happened — the explicit run() is the browser rerun).
+    at.run()
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    assert "16d with no response" not in rendered
+
+
 def test_status_suggestion_panel_renders_and_applies(tmp_path, monkeypatch):
     """A pending email suggestion renders in the Tracker tab; clicking Apply
     moves the application through tracker.transition."""

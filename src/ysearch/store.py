@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     salary_min REAL,
     salary_max REAL,
     currency TEXT,
+    source TEXT,  -- first source that discovered the job (jsearch/greenhouse/...)
     source_urls TEXT NOT NULL DEFAULT '[]',
     primary_url TEXT,
     posted_at TEXT,
@@ -86,8 +87,9 @@ CREATE TABLE IF NOT EXISTS status_suggestions (
     application_id INTEGER REFERENCES applications(id),  -- NULL = unmatched email
     suggested_state TEXT,
     kind TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'email',  -- email | stalled (nudges.py)
     company_guess TEXT,
-    email_subject TEXT,
+    email_subject TEXT,  -- the evidence line: subject for emails, stall reason for 'stalled'
     email_date TEXT,
     confidence REAL,
     resolution TEXT NOT NULL DEFAULT 'pending',  -- pending | accepted | dismissed
@@ -134,9 +136,33 @@ def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
 def _migrate(conn: sqlite3.Connection) -> None:
     """Column adds for dbs created before a column existed — CREATE TABLE IF
     NOT EXISTS never alters an existing table, so new columns need ALTERs."""
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
-    if "repost_count" not in cols:
+    jobs_cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+    if "repost_count" not in jobs_cols:
         conn.execute("ALTER TABLE jobs ADD COLUMN repost_count INTEGER NOT NULL DEFAULT 0")
+    if "source" not in jobs_cols:
+        conn.execute("ALTER TABLE jobs ADD COLUMN source TEXT")
+        # Backfill pre-column rows from the apply URL — best-effort
+        # attribution (a JSearch find merged with an ATS posting counts as
+        # the ATS, which is where the application actually goes). Rows with
+        # no URL stay NULL and report as "unknown" rather than guessed.
+        for pattern, source in (
+            ("%greenhouse.io%", "greenhouse"),
+            ("%lever.co%", "lever"),
+            ("%ashbyhq.com%", "ashby"),
+            ("%naukri%", "naukri_email"),
+        ):
+            conn.execute(
+                "UPDATE jobs SET source = ? WHERE source IS NULL AND primary_url LIKE ?",
+                (source, pattern),
+            )
+        conn.execute(
+            "UPDATE jobs SET source = 'jsearch' WHERE source IS NULL AND primary_url IS NOT NULL"
+        )
+    sugg_cols = {row[1] for row in conn.execute("PRAGMA table_info(status_suggestions)")}
+    if sugg_cols and "source" not in sugg_cols:
+        conn.execute(
+            "ALTER TABLE status_suggestions ADD COLUMN source TEXT NOT NULL DEFAULT 'email'"
+        )
 
 
 def init_db(conn: sqlite3.Connection) -> None:
@@ -202,9 +228,9 @@ def upsert_job(
         urls = [job.url] if job.url else []
         cur = conn.execute(
             """INSERT INTO jobs (dedupe_key, title, company, location, location_bucket,
-                  remote, salary_min, salary_max, currency, source_urls, primary_url,
-                  posted_at, description, raw_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                  remote, salary_min, salary_max, currency, source, source_urls,
+                  primary_url, posted_at, description, raw_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 key,
                 job.title,
@@ -215,6 +241,7 @@ def upsert_job(
                 job.salary_min,
                 job.salary_max,
                 job.currency,
+                job.source,
                 json.dumps(urls),
                 choose_primary(urls),
                 job.posted_at,
@@ -246,6 +273,7 @@ def upsert_job(
     conn.execute(
         """UPDATE jobs SET source_urls = ?, primary_url = ?, description = ?, posted_at = ?,
               repost_count = repost_count + ?,
+              source = COALESCE(source, ?),
               salary_min = COALESCE(salary_min, ?), salary_max = COALESCE(salary_max, ?),
               currency = COALESCE(currency, ?)
            WHERE id = ?""",
@@ -255,6 +283,7 @@ def upsert_job(
             description,
             posted_at,
             repost_bump,
+            job.source,
             job.salary_min,
             job.salary_max,
             job.currency,

@@ -104,6 +104,25 @@ stays a record of your decisions.
 4. Apply moves the application (and pins the email subject/date as a note);
    Dismiss hides the suggestion. Already-processed emails are never re-billed.
 
+## Never let an application rot
+
+The black hole is the worst part of a job hunt. ysearch watches your pipeline
+deterministically (no AI, no cost) and keeps you honest:
+
+- **Follow-up nudges** — an application sitting in `applied` for 14+ days
+  with no response shows a nudge at the top of the Tracker. **Log follow-up**
+  records it as a note (and restarts the clock); silence for another 14 days
+  nudges again. Shortlisted jobs you never applied to nudge after 7 days.
+- **Auto-ghost suggestions** — 30+ days of silence in
+  applied/screen/interview produces a `ghosted` suggestion in the same
+  Apply/Dismiss panel as email suggestions. Dismissing it means "stop asking"
+  until the application actually moves again. Nothing is ever auto-moved.
+- **What's working** (Funnel tab) — response rate split by where each job
+  came from (direct ATS vs aggregator vs Naukri), plus median days to first
+  response. A rejection counts as a response; ghosting doesn't. Small
+  numbers are shown as fractions — don't read percentages into three
+  applications.
+
 ## Daily use
 
 ```bash
