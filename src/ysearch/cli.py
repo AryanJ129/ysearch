@@ -6,19 +6,21 @@ import argparse
 import os
 import sys
 
-from ysearch import config, llm, store
+from ysearch import config, llm, paths, store
 
 
 def cmd_doctor() -> int:
     config.load_env()
     ok = True
+    data_root = paths.data_dir().resolve()
+    print(f"[ok] data dir: {data_root}")
     for name, loader in (("criteria", config.load_criteria), ("companies", config.load_companies)):
         try:
             loader()
-            print(f"[ok] config/{name}.yaml")
+            print(f"[ok] {data_root / 'config' / name}.yaml")
         except Exception as exc:  # surfaced, not swallowed — doctor reports everything
             ok = False
-            print(f"[!!] config/{name}.yaml: {exc}")
+            print(f"[!!] {data_root / 'config' / name}.yaml: {exc}")
     conn = store.connect()
     store.init_db(conn)
     mode = conn.execute("PRAGMA journal_mode").fetchone()[0]

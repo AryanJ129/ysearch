@@ -238,13 +238,16 @@ with tab_funnel:
 with tab_settings:
     import os
 
-    from ysearch import llm, scan
+    from ysearch import llm, paths, scan
     from ysearch.sources import jsearch
+
+    data_root = paths.data_dir().resolve()
+    st.caption(f"Data folder (config, db, keys): `{data_root}`")
 
     st.subheader("API keys")
     st.caption(
-        "Stored in this folder's `.env` (gitignored) — your keys stay on your machine,"
-        " are never committed, never shown in full, and never logged. Both have free tiers."
+        f"Stored in `{data_root / '.env'}` (never committed) — your keys stay on your"
+        " machine, are never shown in full, and never logged. Both have free tiers."
     )
     key_specs = [
         (
@@ -395,13 +398,14 @@ with tab_settings:
             st.error(f"Not saved — {exc}")
 
 with tab_help:
-    from pathlib import Path
+    from ysearch import paths
 
-    readme = Path("README.md")
-    if readme.exists():
-        # Single source of truth: the Help tab IS the README, never a copy.
-        st.markdown(readme.read_text(encoding="utf-8"))
+    # Single source of truth: the Help tab IS the README — the clone's file in
+    # repo mode, the copy packaged into the wheel in home mode.
+    readme_md = paths.readme_text()
+    if readme_md:
+        st.markdown(readme_md)
     else:
-        st.info("README.md not found next to the app — see the repository for the guide.")
+        st.info("README not found — see github.com/AryanJ129/ysearch for the guide.")
 
 conn.close()

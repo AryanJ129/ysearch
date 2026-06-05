@@ -11,9 +11,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+from ysearch import paths
 from ysearch.models import Job
-
-DEFAULT_DB = Path("ysearch.db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -94,8 +93,14 @@ _AGGREGATOR_HOSTS = (
 )
 
 
-def connect(db_path: Path | str = DEFAULT_DB) -> sqlite3.Connection:
-    """Open a connection with WAL + busy timeout set (see module docstring)."""
+def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
+    """Open a connection with WAL + busy timeout set (see module docstring).
+
+    Default resolves at call time (NOT def time) so the repo-vs-home data-dir
+    decision sees the caller's actual cwd.
+    """
+    if db_path is None:
+        db_path = paths.data_dir() / "ysearch.db"
     conn = sqlite3.connect(str(db_path), timeout=5.0)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")

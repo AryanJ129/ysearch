@@ -14,7 +14,12 @@ import yaml
 from dotenv import dotenv_values
 from pydantic import BaseModel, Field, field_validator
 
-CONFIG_DIR = Path("config")
+from ysearch import paths
+
+
+def config_dir() -> Path:
+    """config/ under the resolved data dir — cwd in a clone, ~/.ysearch else."""
+    return paths.data_dir() / "config"
 
 
 class QuerySpec(BaseModel):
@@ -87,15 +92,15 @@ def load_env(dotenv_path: Path | str | None = None) -> None:
     .env.example) never clobber shell values. python-dotenv's default does
     neither: it silently ignores .env when the shell already exports the name.
     """
-    # Explicit "./.env" — dotenv's no-arg mode WALKS UP the directory tree and
+    # Explicit path — dotenv's no-arg mode WALKS UP the directory tree and
     # can load a .env from a parent (it found the real keys from inside a
-    # chdir'd test tmpdir). Config is cwd-relative everywhere else; the env
-    # must be too.
-    values = dotenv_values(dotenv_path if dotenv_path is not None else ".env")
+    # chdir'd test tmpdir). The .env must live in the same resolved data dir
+    # as everything else.
+    values = dotenv_values(dotenv_path if dotenv_path is not None else paths.data_dir() / ".env")
     os.environ.update({k: v for k, v in values.items() if v})
 
 
-def save_env_values(updates: dict[str, str], path: Path | str = ".env") -> None:
+def save_env_values(updates: dict[str, str], path: Path | str | None = None) -> None:
     """Update or append KEY=VALUE lines in .env, preserving everything else.
 
     Also applies the values to the running process so a UI save takes effect
@@ -104,7 +109,7 @@ def save_env_values(updates: dict[str, str], path: Path | str = ".env") -> None:
     updates = {k: v.strip() for k, v in updates.items() if v and v.strip()}
     if not updates:
         return
-    path = Path(path)
+    path = Path(path) if path is not None else paths.data_dir() / ".env"
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
     done: set[str] = set()
     out: list[str] = []
@@ -130,16 +135,16 @@ def _load_yaml(path: Path) -> dict:
 
 
 def load_criteria(path: Path | None = None) -> Criteria:
-    return Criteria(**_load_yaml(path or CONFIG_DIR / "criteria.yaml"))
+    return Criteria(**_load_yaml(path or config_dir() / "criteria.yaml"))
 
 
 def load_companies(path: Path | None = None) -> Companies:
-    return Companies(**_load_yaml(path or CONFIG_DIR / "companies.yaml"))
+    return Companies(**_load_yaml(path or config_dir() / "companies.yaml"))
 
 
 def load_resume(path: Path | None = None) -> str:
     """Plain-text resume used to ground cover-note drafts. Gitignored."""
-    path = path or CONFIG_DIR / "resume.md"
+    path = path or config_dir() / "resume.md"
     if not path.exists():
         raise FileNotFoundError(
             f"{path} not found — paste your resume in the Settings tab or copy"
@@ -149,14 +154,14 @@ def load_resume(path: Path | None = None) -> str:
 
 
 def save_resume(text: str, path: Path | None = None) -> None:
-    path = path or CONFIG_DIR / "resume.md"
+    path = path or config_dir() / "resume.md"
     path.parent.mkdir(exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
 def companies_yaml_text(path: Path | None = None) -> str:
     """Raw companies.yaml text for the Settings ATS-watchlist editor."""
-    path = path or CONFIG_DIR / "companies.yaml"
+    path = path or config_dir() / "companies.yaml"
     if path.exists():
         return path.read_text(encoding="utf-8")
     example = path.with_name(f"{path.stem}.example{path.suffix}")
@@ -169,7 +174,7 @@ def save_companies_yaml(text: str, path: Path | None = None) -> Companies:
     if not isinstance(data, dict):
         raise ValueError("Watchlist must be a YAML mapping (greenhouse/lever/ashby lists).")
     companies = Companies(**data)
-    path = path or CONFIG_DIR / "companies.yaml"
+    path = path or config_dir() / "companies.yaml"
     path.parent.mkdir(exist_ok=True)
     path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
     return companies
@@ -178,7 +183,7 @@ def save_companies_yaml(text: str, path: Path | None = None) -> Companies:
 def criteria_yaml_text(path: Path | None = None) -> str:
     """Raw criteria.yaml text for the Settings editor (falls back to the
     example, then empty)."""
-    path = path or CONFIG_DIR / "criteria.yaml"
+    path = path or config_dir() / "criteria.yaml"
     if path.exists():
         return path.read_text(encoding="utf-8")
     example = path.with_name(f"{path.stem}.example{path.suffix}")
@@ -191,7 +196,7 @@ def save_criteria_yaml(text: str, path: Path | None = None) -> Criteria:
     if not isinstance(data, dict):
         raise ValueError("Criteria must be a YAML mapping (key: value pairs).")
     criteria = Criteria(**data)  # raises pydantic.ValidationError on bad shape
-    path = path or CONFIG_DIR / "criteria.yaml"
+    path = path or config_dir() / "criteria.yaml"
     path.parent.mkdir(exist_ok=True)
     path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
     return criteria

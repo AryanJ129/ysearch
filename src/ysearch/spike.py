@@ -13,11 +13,15 @@ from pathlib import Path
 
 import httpx
 
-from ysearch import config
+from ysearch import config, paths
 from ysearch.models import Job
 from ysearch.sources import ats, jsearch
 
-SPIKE_DIR = Path("spike")
+
+def spike_dir() -> Path:
+    """spike/ under the resolved data dir (gitignored in a clone)."""
+    return paths.data_dir() / "spike"
+
 
 # Crude title filter so an ATS board with hundreds of roles stays eyeball-able.
 _ATS_TITLE_FILTER = re.compile(
@@ -57,7 +61,8 @@ def run(per_query: int = 10) -> int:
     config.load_env()
     criteria = config.load_criteria()
     companies = config.load_companies()
-    SPIKE_DIR.mkdir(exist_ok=True)
+    out_dir = spike_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     lines: list[str] = [
         "# Discovery spike — raw results for owner eyeball",
@@ -78,7 +83,7 @@ def run(per_query: int = 10) -> int:
             except (httpx.HTTPError, RuntimeError) as exc:
                 lines += ["", f"### {query}", f"FAILED: {exc}"]
                 continue
-            raw_path = SPIKE_DIR / f"jsearch_{re.sub(r'[^a-z0-9]+', '_', query.lower())}.json"
+            raw_path = out_dir / f"jsearch_{re.sub(r'[^a-z0-9]+', '_', query.lower())}.json"
             # Dump the RAW payload, not parsed Jobs — the raw dump is what
             # diagnoses field-mapping bugs (lesson: job_location vs job_city).
             raw_path.write_text(json.dumps(result.raw, indent=2), encoding="utf-8")
@@ -102,7 +107,7 @@ def run(per_query: int = 10) -> int:
             lines += ["", f"### {slug}", f"FAILED (check slug): {exc}"]
             continue
         matching = [j for j in jobs if _ATS_TITLE_FILTER.search(j.title)]
-        raw_path = SPIKE_DIR / f"greenhouse_{slug}.json"
+        raw_path = out_dir / f"greenhouse_{slug}.json"
         raw_path.write_text(json.dumps([j.model_dump() for j in jobs], indent=2), encoding="utf-8")
         lines += [
             "",
@@ -111,7 +116,7 @@ def run(per_query: int = 10) -> int:
         ]
         lines += [_row(j) for j in matching[:per_query]]
 
-    out = SPIKE_DIR / "results.md"
+    out = out_dir / "results.md"
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Spike dump written to {out} — eyeball it before greenlighting Phase 2.")
     return 0

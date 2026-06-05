@@ -14,12 +14,19 @@ from pathlib import Path
 
 import httpx
 
+from ysearch import paths
+
 MODEL = "anthropic/claude-haiku-4.5"
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 # Claude Haiku 4.5 via OpenRouter, USD per token.
 PRICE_IN = 1e-6
 PRICE_OUT = 5e-6
-METRICS_PATH = Path("metrics/llm_costs.jsonl")
+
+
+def metrics_path() -> Path:
+    """metrics/llm_costs.jsonl under the resolved data dir (call-time, not
+    import-time, so the repo-vs-home decision sees the actual cwd)."""
+    return paths.data_dir() / "metrics" / "llm_costs.jsonl"
 
 
 def model_available(models_payload: dict, slug: str = MODEL) -> bool:
@@ -113,7 +120,8 @@ def chat(
 
 def log_cost(kind: str, *, job_id: int, cost_usd: float, score: int | None = None) -> None:
     """Append one spend entry to metrics/llm_costs.jsonl (gitignored)."""
-    METRICS_PATH.parent.mkdir(exist_ok=True)
+    out = metrics_path()
+    out.parent.mkdir(parents=True, exist_ok=True)
     entry: dict = {
         "ts": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
         "kind": kind,
@@ -123,5 +131,5 @@ def log_cost(kind: str, *, job_id: int, cost_usd: float, score: int | None = Non
     }
     if score is not None:
         entry["score"] = score
-    with METRICS_PATH.open("a", encoding="utf-8") as fh:
+    with out.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry) + "\n")
